@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+from . import models as m
+from .utils import dt_iso
+
+
+def stock_payload(stock: m.Stock) -> dict:
+    return {
+        "code": stock.code,
+        "symbol": stock.symbol,
+        "exchange": stock.exchange,
+        "name": stock.name,
+        "market": stock.market,
+        "industry": stock.industry,
+    }
+
+
+def quote_payload(stock: m.Stock) -> dict:
+    return {
+        "price": stock.price,
+        "change": stock.change,
+        "changePercent": stock.change_percent,
+        "volume": stock.volume,
+        "amount": stock.amount,
+        "updateTime": dt_iso(stock.update_time),
+    }
+
+
+def research_task_payload(task: m.ResearchTask) -> dict:
+    return {
+        "taskId": task.id,
+        "code": task.code,
+        "symbol": task.stock.symbol if task.stock else None,
+        "status": task.status,
+        "currentStep": task.current_step,
+        "progressPct": task.progress_pct,
+        "createdAt": dt_iso(task.created_at),
+        "updatedAt": dt_iso(task.updated_at),
+        "reportId": task.report_id,
+        "redirectTo": f"/research/{task.code}" if task.report_id else None,
+    }
+
+
+def research_record_payload(task: m.ResearchTask) -> dict:
+    return {
+        "id": task.id,
+        "taskId": task.id,
+        "reportId": task.report_id,
+        "code": task.code,
+        "symbol": task.stock.symbol,
+        "name": task.stock.name,
+        "researchTime": dt_iso(task.created_at),
+        "status": task.status,
+        "updateTime": dt_iso(task.updated_at),
+    }
+
+
+def research_report_payload(report: m.ResearchReport) -> dict:
+    stock = report.stock
+    return {
+        "reportId": report.id,
+        "code": report.code,
+        "symbol": stock.symbol,
+        "name": stock.name,
+        "market": stock.market,
+        "industry": stock.industry,
+        "generatedAt": dt_iso(report.generated_at),
+        "researchBasePeriod": report.research_base_period,
+        "dataSources": report.data_sources,
+        "updateFrequency": "10min",
+        "quote": quote_payload(stock),
+        "trend": mock_trend(stock),
+        "financialSnapshot": {
+            "revenue": stock.revenue,
+            "profit": stock.profit,
+            "grossMargin": stock.gross_margin,
+            "netMargin": stock.net_margin,
+            "roe": stock.roe,
+            "pe": stock.pe,
+        },
+        "report": {
+            "overview": report.overview,
+            "keyInsights": report.key_insights,
+            "worthFurtherResearch": report.worth_further_research,
+            "aiConfidence": report.ai_confidence,
+            "dataCompleteness": report.data_completeness,
+            "aiDisclaimer": report.ai_disclaimer,
+            "risks": report.risks,
+            "businessSegments": report.business_segments,
+            "newsItems": report.news_items,
+        },
+    }
+
+
+def mock_trend(stock: m.Stock) -> list[dict]:
+    base = stock.price
+    return [
+        {"date": "2026-04-19", "price": round(base * 0.975, 2)},
+        {"date": "2026-04-20", "price": round(base * 0.982, 2)},
+        {"date": "2026-04-21", "price": round(base * 0.971, 2)},
+        {"date": "2026-04-22", "price": round(base * 0.989, 2)},
+        {"date": "2026-04-23", "price": round(base * 0.996, 2)},
+        {"date": "2026-04-24", "price": round(base * 0.991, 2)},
+        {"date": "2026-04-25", "price": round(base, 2)},
+    ]
+
+
+def watchlist_payload(item: m.WatchlistItem) -> dict:
+    return {
+        "id": item.id,
+        "code": item.code,
+        "symbol": item.stock.symbol,
+        "name": item.stock.name,
+        "source": item.source,
+        "reportId": item.report_id,
+        "note": item.note,
+        "createdAt": dt_iso(item.created_at),
+    }
+
+
+def monitoring_payload(item: m.MonitoringItem, latest_signal=None, latest_risk=None, latest_order=None) -> dict:
+    return {
+        "id": item.id,
+        "code": item.code,
+        "symbol": item.stock.symbol,
+        "name": item.stock.name,
+        "enabled": item.enabled,
+        "strategyId": item.strategy_id,
+        "strategyName": item.strategy_name,
+        "source": item.source,
+        "reportId": item.report_id,
+        "createdAt": dt_iso(item.created_at),
+        "updatedAt": dt_iso(item.updated_at),
+        "latestSignal": signal_payload(latest_signal) if latest_signal else None,
+        "latestRiskCheck": risk_payload(latest_risk) if latest_risk else None,
+        "latestOrder": order_payload(latest_order) if latest_order else None,
+    }
+
+
+def signal_payload(signal: m.Signal) -> dict:
+    return {
+        "id": signal.id,
+        "runId": signal.run_id,
+        "traceId": signal.trace_id,
+        "code": signal.code,
+        "type": signal.type,
+        "reason": signal.reason,
+        "confidence": signal.confidence,
+        "generatedAt": dt_iso(signal.generated_at),
+    }
+
+
+def risk_payload(risk: m.RiskCheck) -> dict:
+    return {
+        "id": risk.id,
+        "runId": risk.run_id,
+        "traceId": risk.trace_id,
+        "signalId": risk.signal_id,
+        "time": dt_iso(risk.checked_at),
+        "code": risk.code,
+        "signal": risk.signal,
+        "passed": risk.passed,
+        "status": risk.status,
+        "reason": risk.reason,
+        "rule": risk.rule,
+    }
+
+
+def order_payload(order: m.PaperOrder) -> dict:
+    return {
+        "id": order.id,
+        "runId": order.run_id,
+        "traceId": order.trace_id,
+        "signalId": order.signal_id,
+        "riskCheckId": order.risk_check_id,
+        "createTime": dt_iso(order.create_time),
+        "code": order.code,
+        "symbol": order.stock.symbol,
+        "name": order.stock.name,
+        "side": order.side,
+        "type": order.side,
+        "orderType": order.order_type,
+        "quantity": order.quantity,
+        "price": order.price,
+        "filledQuantity": order.filled_quantity,
+        "avgPrice": order.avg_price,
+        "status": order.status,
+        "rejectReason": order.reject_reason,
+    }
+
+
+def position_payload(position: m.Position) -> dict:
+    return {
+        "id": position.id,
+        "accountId": position.account_id,
+        "code": position.code,
+        "symbol": position.stock.symbol,
+        "name": position.stock.name,
+        "quantity": position.quantity,
+        "available": position.available,
+        "costPrice": position.cost_price,
+        "currentPrice": position.current_price,
+        "marketValue": position.market_value,
+        "realizedPnl": position.realized_pnl,
+        "unrealizedPnl": position.unrealized_pnl,
+        "profitProgress": position.profit_progress,
+        "lastRunId": position.last_run_id,
+        "lastTraceId": position.last_trace_id,
+        "updateTime": dt_iso(position.update_time),
+    }
+
+
+def log_payload(log: m.SystemLog) -> dict:
+    return {
+        "id": log.id,
+        "time": dt_iso(log.time),
+        "level": log.level,
+        "module": log.module,
+        "code": log.code,
+        "event": log.event,
+        "detail": log.detail,
+        "relId": log.rel_id,
+        "runId": log.run_id,
+        "traceId": log.trace_id,
+    }

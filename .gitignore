@@ -45,3 +45,11 @@ Thumbs.db
 # Optional deploy / local tooling
 .vercel/
 .netlify/
+.omx/
+
+# Python backend local artifacts
+.venv/
+paper_trading.db
+*.db-journal
+__pycache__/
+.pytest_cache/
