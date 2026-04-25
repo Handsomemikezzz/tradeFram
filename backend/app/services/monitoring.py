@@ -7,14 +7,14 @@ from sqlalchemy.orm import Session
 from .. import models as m
 from ..schemas import MonitoringCreate, MonitoringUpdate, WatchlistCreate
 from ..services.research import require_stock
-from ..utils import new_id
+from ..utils import api_error, new_id
 
 
 def add_watchlist_item(db: Session, payload: WatchlistCreate) -> m.WatchlistItem:
     stock = require_stock(db, payload.code)
     existing = db.query(m.WatchlistItem).filter(m.WatchlistItem.code == stock.code).first()
     if existing:
-        return existing
+        raise api_error(409, "WATCHLIST_ALREADY_EXISTS", f"{stock.name} 已在观察池中", {"id": existing.id, "code": stock.code})
     item = m.WatchlistItem(
         id=new_id("wl"),
         code=stock.code,
@@ -33,11 +33,7 @@ def add_monitoring_item(db: Session, payload: MonitoringCreate) -> m.MonitoringI
     stock = require_stock(db, payload.code)
     existing = db.query(m.MonitoringItem).filter(m.MonitoringItem.code == stock.code).first()
     if existing:
-        existing.enabled = payload.enabled
-        existing.updated_at = datetime.now(UTC)
-        db.commit()
-        db.refresh(existing)
-        return existing
+        raise api_error(409, "MONITORING_ITEM_ALREADY_EXISTS", f"{stock.name} 已在交易监控池中", {"id": existing.id, "code": stock.code})
     strategy_id = payload.strategyId or ("strategy_mock_breakout" if stock.code == "300750" else "strategy_mock_ma_reversion")
     strategy_name = payload.strategyName or ("突破策略" if stock.code == "300750" else "均线回归")
     item = m.MonitoringItem(

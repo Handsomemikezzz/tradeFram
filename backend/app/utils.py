@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 
 CN_TZ = ZoneInfo("Asia/Shanghai")
@@ -67,5 +68,5 @@ async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse
 async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(
         status_code=422,
-        content=error_payload("VALIDATION_ERROR", "请求参数校验失败", exc.errors()),
+        content=error_payload("VALIDATION_ERROR", "请求参数校验失败", jsonable_encoder(exc.errors())),
     )

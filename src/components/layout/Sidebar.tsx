@@ -3,20 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Search, 
-  MonitorPlay, 
-  History, 
-  Settings, 
-  ShieldCheck,
-  TrendingUp,
-  FileText
+import {
+  LayoutDashboard,
+  Search,
+  MonitorPlay,
+  History,
+  Settings,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator';
+import { dataSourceStatusLabel, DataSourceHealthItem, systemApi, SystemStatusResponse, systemStatusLabel } from '@/services/api';
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: '首页概览', path: '/' },
@@ -26,6 +23,30 @@ const NAV_ITEMS = [
 ];
 
 export const Sidebar = () => {
+  const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null);
+  const [dataSources, setDataSources] = useState<DataSourceHealthItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([systemApi.getStatus(), systemApi.getDataSourcesHealth()])
+      .then(([status, sources]) => {
+        if (cancelled) return;
+        setSystemStatus(status);
+        setDataSources(sources.items);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSystemStatus(null);
+        setDataSources([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const tushare = dataSources.find((source) => source.name === 'Tushare');
+  const aiService = dataSources.find((source) => source.name === 'AI Service');
+
   return (
     <aside className="w-56 bg-[var(--color-sidebar-dark)] text-white flex flex-col h-screen sticky top-0 shrink-0">
       <div className="p-6 border-b border-white/10">
@@ -57,11 +78,11 @@ export const Sidebar = () => {
       <div className="p-6 text-[11px] text-gray-500 space-y-2">
         <div className="flex justify-between">
           <span>数据源 Tushare</span> 
-          <span className="text-green-500 underline underline-offset-2">已连接</span>
+          <span className="text-green-500 underline underline-offset-2">{tushare ? dataSourceStatusLabel(tushare.status) : '加载中'}</span>
         </div>
         <div className="flex justify-between">
           <span>AI 服务</span> 
-          <span className="text-green-500 underline underline-offset-2">正常</span>
+          <span className="text-green-500 underline underline-offset-2">{aiService ? dataSourceStatusLabel(aiService.status) : systemStatusLabel(systemStatus?.status || 'NORMAL')}</span>
         </div>
       </div>
       

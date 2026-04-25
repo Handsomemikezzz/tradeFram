@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -24,17 +24,39 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { TodayTasks } from '@/components/dashboard/TodayTasks';
 import { MonitoringTable } from '@/components/dashboard/MonitoringTable';
-import { MOCK_DATA_SOURCES, MOCK_RESEARCH_RECORDS, MOCK_LOGS } from '@/services/mockData';
-import { LogLevel } from '@/types';
+import { auditApi, DashboardOverviewResponse, formatCurrency, formatTime, logLevelLabel, LogResponse, researchApi, systemApi } from '@/services/api';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
 export default function Dashboard() {
+  const [logs, setLogs] = useState<LogResponse[]>([]);
+  const [logsError, setLogsError] = useState<string | null>(null);
+  const [quickCode, setQuickCode] = useState('');
+  const [overview, setOverview] = useState<DashboardOverviewResponse | null>(null);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    systemApi.getDashboardOverview()
+      .then((data) => { if (!cancelled) setOverview(data); })
+      .catch((err: Error) => { if (!cancelled) setOverviewError(err.message); });
+    auditApi.getLogs({ pageSize: 20 })
+      .then((page) => { if (!cancelled) setLogs(page.items); })
+      .catch((err: Error) => { if (!cancelled) setLogsError(err.message); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const startQuickResearch = async () => {
+    if (!quickCode || quickCode.length < 6) return;
+    const task = await researchApi.createTask({ code: quickCode });
+    window.location.href = `/research/${task.code}`;
+  };
+
   const kpis = [
-    { label: '观察池监控', value: 24, icon: Eye, color: 'text-[#1A1C1E]', trend: '+3 今日新增', trendColor: 'text-blue-500' },
-    { label: '今日信号 (Signals)', value: 8, icon: Terminal, color: 'text-red-600', trend: '5 买入 / 3 卖出', trendColor: 'text-gray-400' },
-    { label: '风控拦截', value: 2, icon: ShieldAlert, color: 'text-amber-600', trend: '查看拦截详情', trendColor: 'text-amber-600 underline' },
-    { label: '模拟账户净值', value: '¥1,024,530', icon: TrendingUp, color: 'text-green-600', trend: '+2.45% 本月收益', trendColor: 'text-green-600' },
+    { label: '观察池监控', value: overview?.kpis.watchlistCount ?? '-', icon: Eye, color: 'text-[#1A1C1E]', trend: overview?.kpis.watchlistTrendText || '加载中', trendColor: 'text-blue-500' },
+    { label: '今日信号 (Signals)', value: overview?.kpis.todaySignalCount ?? '-', icon: Terminal, color: 'text-red-600', trend: overview ? `${overview.kpis.todayBuySignalCount} 买入 / ${overview.kpis.todaySellSignalCount} 卖出` : '加载中', trendColor: 'text-gray-400' },
+    { label: '风控拦截', value: overview?.kpis.todayRiskBlockedCount ?? '-', icon: ShieldAlert, color: 'text-amber-600', trend: '查看拦截详情', trendColor: 'text-amber-600 underline' },
+    { label: '模拟账户净值', value: overview ? formatCurrency(overview.kpis.paperAccountNetAsset) : '-', icon: TrendingUp, color: 'text-green-600', trend: overview ? `${overview.kpis.monthReturnPct >= 0 ? '+' : ''}${overview.kpis.monthReturnPct}% 本月收益` : '加载中', trendColor: 'text-green-600' },
   ];
 
   return (
@@ -43,9 +65,11 @@ export default function Dashboard() {
       <div className="p-2 bg-amber-50 border border-amber-200 rounded flex items-center shadow-sm">
         <span className="text-amber-600 mr-2 text-sm">⚠️</span>
         <p className="text-[11px] text-amber-800 font-medium">
-          风险提示：本系统仅用于研究学习和模拟交易，不构成投资建议。所有交易结果均为模拟数据，请知悉。
+          {overview?.riskDisclaimer || '风险提示：本系统仅用于研究学习和模拟交易，不构成投资建议。所有交易结果均为模拟数据，请知悉。'}
         </p>
       </div>
+
+      {overviewError && <div className="text-[11px] text-red-500">Dashboard 聚合数据加载失败：{overviewError}</div>}
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -65,7 +89,7 @@ export default function Dashboard() {
       </div>
 
       {/* Today's Tasks */}
-      <TodayTasks />
+      <TodayTasks tasks={overview?.tasks} />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Main Monitoring Table */}
@@ -78,16 +102,18 @@ export default function Dashboard() {
             <span className="text-[9px] bg-green-900/50 text-green-400 px-1.5 py-0.5 rounded font-mono">LIVE</span>
           </div>
           <CardContent className="p-4 flex-1 font-mono text-[11px] space-y-4 overflow-y-auto max-h-[350px]">
-            {MOCK_LOGS.map((log) => (
+            {logsError && <div className="text-red-400">{logsError}</div>}
+            {!logsError && logs.length === 0 && <div className="text-gray-500">暂无系统日志</div>}
+            {!logsError && logs.map((log) => (
               <div key={log.id} className="flex space-x-2 border-b border-white/5 pb-2 last:border-0">
-                <span className="text-gray-500 tabular-nums shrink-0">[{log.time.split(' ')[1].substring(0, 8)}]</span>
+                <span className="text-gray-500 tabular-nums shrink-0">[{formatTime(log.time).substring(0, 8)}]</span>
                 <span className={cn(
                   "font-bold shrink-0 text-[10px]",
-                  log.level === LogLevel.SUCCESS ? "text-green-400" : 
-                  log.level === LogLevel.ERROR ? "text-red-400" :
-                  log.level === LogLevel.WARN ? "text-amber-400" : "text-blue-400"
+                  log.level === 'SUCCESS' ? "text-green-400" : 
+                  log.level === 'ERROR' ? "text-red-400" :
+                  log.level === 'WARN' ? "text-amber-400" : "text-blue-400"
                 )}>
-                  {log.level.substring(0, 4)}
+                  {logLevelLabel(log.level).substring(0, 4)}
                 </span>
                 <span className="flex-1 text-gray-300 leading-tight">{log.event}: {log.detail}</span>
               </div>
@@ -105,21 +131,24 @@ export default function Dashboard() {
         <div className="relative flex-1 max-w-sm">
           <Input 
             placeholder="请输入 A 股代码 (e.g. 600036)" 
+            value={quickCode}
+            onChange={(event) => setQuickCode(event.target.value)}
+            maxLength={6}
             className="w-full bg-gray-100 border border-gray-200 rounded px-3 h-8 text-xs focus-visible:ring-blue-500"
           />
         </div>
-        <Button size="sm" className="bg-blue-600 text-white text-[10px] font-bold rounded shadow-lg shadow-blue-100 hover:bg-blue-700 h-8 px-4 uppercase tracking-wider">
+        <Button size="sm" onClick={startQuickResearch} className="bg-blue-600 text-white text-[10px] font-bold rounded shadow-lg shadow-blue-100 hover:bg-blue-700 h-8 px-4 uppercase tracking-wider">
           开始 AI 研究分析
         </Button>
         <div className="flex-1"></div>
         <div className="hidden md:flex space-x-4 text-[10px] font-bold uppercase tracking-wider">
           <div className="flex items-center text-gray-500">
             <span className="w-2 h-2 rounded-full bg-blue-500 mr-2"></span>
-            已完成研究: 124
+            已完成研究: {overview?.quickResearchStats.completedResearchCount ?? '-'}
           </div>
           <div className="flex items-center text-gray-500">
             <span className="w-2 h-2 rounded-full bg-gray-300 mr-2"></span>
-            待处理任务: 0
+            待处理任务: {overview?.quickResearchStats.pendingTaskCount ?? '-'}
           </div>
         </div>
       </Card>
