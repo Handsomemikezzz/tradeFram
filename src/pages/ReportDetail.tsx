@@ -8,17 +8,19 @@ import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpRight, ArrowDownRight, BarChart3, Clock, Database, Globe, Newspaper, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, BarChart3, Clock, Database, Globe, Newspaper, RefreshCw, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
-import { formatDateTime, monitoringApi, newsTypeLabel, researchApi, ResearchReportResponse } from '@/services/api';
+import { dataApi, formatDateTime, monitoringApi, newsTypeLabel, researchApi, ResearchReportResponse, StockDataStatusResponse } from '@/services/api';
 
 export default function ReportDetail() {
   const { code } = useParams();
   const [report, setReport] = useState<ResearchReportResponse | null>(null);
+  const [dataStatus, setDataStatus] = useState<StockDataStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -26,9 +28,15 @@ export default function ReportDetail() {
     let cancelled = false;
     setLoading(true);
     researchApi.getReportByCode(code)
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return;
         setReport(data);
+        try {
+          const status = await dataApi.getStockStatus(data.code, data.dataMeta.provider);
+          if (!cancelled) setDataStatus(status);
+        } catch {
+          if (!cancelled) setDataStatus(null);
+        }
         setError(null);
       })
       .catch((err: Error) => {
@@ -63,6 +71,25 @@ export default function ReportDetail() {
     }
   };
 
+  const refreshData = async () => {
+    if (!report) return;
+    setRefreshing(true);
+    try {
+      await dataApi.refreshStock(report.code, report.dataMeta.provider);
+      const [nextReport, nextStatus] = await Promise.all([
+        researchApi.getReportByCode(report.code),
+        dataApi.getStockStatus(report.code, report.dataMeta.provider),
+      ]);
+      setReport(nextReport);
+      setDataStatus(nextStatus);
+      toast.success('数据刷新完成');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '数据刷新失败，已保留本地缓存');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loading) {
     return <div className="p-8 text-center text-gray-400">正在加载研究报告...</div>;
   }
@@ -93,6 +120,9 @@ export default function ReportDetail() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-white border-gray-300" onClick={refreshData} disabled={refreshing}>
+            <RefreshCw className={cn('w-3 h-3 mr-1', refreshing && 'animate-spin')} />刷新数据
+          </Button>
           <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-white border-gray-300" onClick={addWatchlist}>加入观察池</Button>
           <Button size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-blue-600 hover:bg-blue-700" onClick={addMonitoring}>监控此股</Button>
         </div>
@@ -150,6 +180,17 @@ export default function ReportDetail() {
         </Card>
 
         <div className="lg:col-span-4 mt-2">
+          <Card className="border border-blue-100 bg-blue-50/40 shadow-sm rounded-lg mb-4">
+            <CardContent className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 text-[10px]">
+              <div><div className="text-gray-500 font-bold uppercase">Provider</div><div className="font-mono text-gray-900">{dataStatus?.provider || report.dataMeta.provider}</div></div>
+              <div><div className="text-gray-500 font-bold uppercase">数据更新时间</div><div className="font-mono text-gray-900">{formatDateTime(dataStatus?.lastFetchedAt || report.dataUpdatedAt)}</div></div>
+              <div><div className="text-gray-500 font-bold uppercase">完整度</div><div className="font-mono text-gray-900">{Math.round((dataStatus?.dataCompleteness ?? report.dataMeta.dataCompleteness) * 100)}%</div></div>
+              <div><div className="text-gray-500 font-bold uppercase">缓存命中</div><div className="font-mono text-gray-900">{(dataStatus?.cacheHit ?? report.dataMeta.usedCache) ? '是' : '否'}</div></div>
+              <div><div className="text-gray-500 font-bold uppercase">过期缓存</div><div className={cn('font-mono', (dataStatus?.dataStale ?? report.dataMeta.dataStale) ? 'text-orange-600' : 'text-gray-900')}>{(dataStatus?.dataStale ?? report.dataMeta.dataStale) ? '是' : '否'}</div></div>
+              <div><div className="text-gray-500 font-bold uppercase">日线数量</div><div className="font-mono text-gray-900">{dataStatus?.priceBarCount ?? '-'}</div></div>
+              <div><div className="text-gray-500 font-bold uppercase">最近错误</div><div className="font-medium text-red-600 truncate" title={dataStatus?.lastError || report.dataMeta.lastError || undefined}>{dataStatus?.lastError || report.dataMeta.lastError || '无'}</div></div>
+            </CardContent>
+          </Card>
           <Tabs defaultValue="overview" className="space-y-4">
             <TabsList className="bg-white border border-gray-200 rounded-lg p-1 h-auto inline-flex shadow-sm">
               <TabsTrigger value="overview" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">结论摘要</TabsTrigger>
@@ -253,7 +294,9 @@ export default function ReportDetail() {
         
         <div className="lg:col-span-4 border-t pt-6 flex items-center justify-between text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
            <div className="flex items-center gap-4">
-             <div className="flex items-center gap-1.5"><Database className="w-3 h-3" /><span>数据源：{report.dataSources.join(' / ')}</span></div>
+             <div className="flex items-center gap-1.5"><Database className="w-3 h-3" /><span>Provider：{report.dataMeta.provider}</span></div>
+             <div className="flex items-center gap-1.5"><Database className="w-3 h-3" /><span>数据更新时间：{formatDateTime(report.dataUpdatedAt)}</span></div>
+             <div className="flex items-center gap-1.5"><Database className="w-3 h-3" /><span>缓存：{report.dataMeta.usedCache ? (report.dataMeta.dataStale ? '使用过期缓存' : '命中缓存') : '实时刷新'}</span></div>
              <div className="flex items-center gap-1.5"><TrendingUp className="w-3 h-3" /><span>更新频率：{report.updateFrequency}/次</span></div>
            </div>
            <div className="flex items-center gap-1.5"><ShieldAlert className="w-3 h-3" /><span>研究基期：{report.researchBasePeriod}</span></div>

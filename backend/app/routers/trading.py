@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..schemas import EngineUpdate, PaperTradingRunCreate
-from ..services.paper_trading import get_engine_state, run_paper_trading, set_engine_state
+from ..services.paper_trading import get_engine_state, run_paper_trading, set_engine_state, trading_time_mode
 from ..utils import dt_iso, ok
 
 router = APIRouter()
@@ -19,6 +19,7 @@ def engine_payload(state):
         "pollingIntervalSec": state.polling_interval_sec,
         "lastRunId": state.last_run_id,
         "updatedAt": dt_iso(state.updated_at),
+        "tradingTimeMode": trading_time_mode(),
     }
 
 

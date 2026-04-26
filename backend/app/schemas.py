@@ -20,7 +20,7 @@ class ApiResponse(BaseModel):
 
 
 class ResearchTaskCreate(BaseModel):
-    code: str = Field(..., min_length=6, max_length=6)
+    code: str = Field(..., min_length=6, max_length=16)
     market: str = "A_SHARE"
     source: str = "USER_INPUT"
     options: dict[str, Any] = Field(default_factory=dict)
@@ -28,9 +28,13 @@ class ResearchTaskCreate(BaseModel):
     @field_validator("code")
     @classmethod
     def code_must_be_digits(cls, value: str) -> str:
-        if not value.isdigit():
-            raise ValueError("code must be a 6 digit A-share code")
-        return value
+        normalized = value.strip().upper()
+        import re
+
+        match = re.fullmatch(r"(?:(SH|SZ|BJ))?(\d{6})(?:\.(SH|SZ|BJ))?", normalized)
+        if not match:
+            raise ValueError("code must be a 6 digit A-share code, optionally with SH/SZ/BJ prefix or suffix")
+        return match.group(2)
 
 
 class WatchlistCreate(BaseModel):
@@ -47,6 +51,8 @@ class MonitoringCreate(BaseModel):
     enabled: bool = True
     source: str = "USER"
     reportId: str | None = None
+    strategyParams: dict[str, Any] = Field(default_factory=dict)
+    riskParams: dict[str, Any] = Field(default_factory=dict)
 
 
 class MonitoringUpdate(BaseModel):

@@ -83,6 +83,10 @@ export interface SystemStatusResponse {
   tradeDay: boolean;
   market: string;
   currentTime: string;
+  tradingTimeMode: {
+    allowManualRunOutsideTradingTime: boolean;
+    strictTradingTimeCheck: boolean;
+  };
   paperTrading: {
     active: boolean;
     pollingEnabled: boolean;
@@ -97,6 +101,32 @@ export interface DataSourceHealthItem {
   latencyMs: number;
   lastCheckedAt: string;
   lastError: string | null;
+}
+
+export interface StockDataStatusResponse {
+  provider: string;
+  code: string;
+  symbol: string;
+  lastFetchedAt: string | null;
+  latestTradeDate: string | null;
+  priceBarCount: number;
+  financialSnapshotAvailable: boolean;
+  cacheHit: boolean;
+  dataStale: boolean;
+  dataCompleteness: number;
+  lastError: string | null;
+}
+
+export interface StockDataRefreshResponse {
+  code: string;
+  symbol: string;
+  provider: string;
+  priceBarCount: number;
+  dataUpdatedAt: string | null;
+  dataCompleteness: number;
+  usedCache: boolean;
+  dataStale: boolean;
+  refreshError: string | null;
 }
 
 export interface ResearchTaskResponse {
@@ -134,6 +164,14 @@ export interface ResearchReportResponse {
   generatedAt: string;
   researchBasePeriod: string;
   dataSources: string[];
+  dataUpdatedAt: string;
+  dataMeta: {
+    provider: string;
+    usedCache: boolean;
+    dataStale: boolean;
+    dataCompleteness: number;
+    lastError: string | null;
+  };
   updateFrequency: string;
   quote: {
     price: number;
@@ -216,6 +254,15 @@ export interface OrderResponse {
   orderType: string;
   quantity: number;
   price: number;
+  rawPrice: number;
+  executedPrice: number;
+  slippageAmount: number;
+  commission: number;
+  stampTax: number;
+  totalFee: number;
+  estimatedAmount: number;
+  finalAmount: number;
+  netAmount: number;
   filledQuantity: number;
   avgPrice: number;
   status: string;
@@ -230,6 +277,8 @@ export interface MonitoringItemResponse {
   enabled: boolean;
   strategyId: string;
   strategyName: string;
+  strategyParams: Record<string, unknown>;
+  riskParams: Record<string, unknown>;
   source: string;
   reportId: string | null;
   createdAt: string;
@@ -246,6 +295,10 @@ export interface EngineResponse {
   pollingIntervalSec: number;
   lastRunId: string | null;
   updatedAt: string;
+  tradingTimeMode: {
+    allowManualRunOutsideTradingTime: boolean;
+    strictTradingTimeCheck: boolean;
+  };
   message?: string;
 }
 

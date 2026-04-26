@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import models as m
 from ..database import get_db
+from ..services.paper_trading import trading_time_mode
 from ..utils import dt_iso, ok, now_iso
 
 router = APIRouter()
@@ -20,6 +21,7 @@ def system_status(db: Session = Depends(get_db)):
             "tradeDay": True,
             "market": "SH_SZ",
             "currentTime": now_iso(),
+            "tradingTimeMode": trading_time_mode(),
             "paperTrading": {
                 "active": bool(engine.active) if engine else False,
                 "pollingEnabled": bool(engine.polling_enabled) if engine else False,

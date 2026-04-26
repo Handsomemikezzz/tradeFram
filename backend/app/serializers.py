@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from sqlalchemy import desc
+from sqlalchemy.orm import object_session
+
 from . import models as m
 from .utils import dt_iso
 
@@ -57,6 +60,10 @@ def research_record_payload(task: m.ResearchTask) -> dict:
 
 def research_report_payload(report: m.ResearchReport) -> dict:
     stock = report.stock
+    latest_quote = getattr(stock, "update_time", None)
+    provider = report.data_sources[0] if report.data_sources else "UNKNOWN"
+    used_cache = "Local Cache" in report.data_sources
+    data_stale = "Stale Cache" in report.data_sources
     return {
         "reportId": report.id,
         "code": report.code,
@@ -67,9 +74,17 @@ def research_report_payload(report: m.ResearchReport) -> dict:
         "generatedAt": dt_iso(report.generated_at),
         "researchBasePeriod": report.research_base_period,
         "dataSources": report.data_sources,
+        "dataUpdatedAt": dt_iso(latest_quote or report.generated_at),
+        "dataMeta": {
+            "provider": provider,
+            "usedCache": used_cache,
+            "dataStale": data_stale,
+            "dataCompleteness": report.data_completeness,
+            "lastError": _last_data_error(report),
+        },
         "updateFrequency": "10min",
         "quote": quote_payload(stock),
-        "trend": mock_trend(stock),
+        "trend": trend_payload(stock),
         "financialSnapshot": {
             "revenue": stock.revenue,
             "profit": stock.profit,
@@ -92,17 +107,33 @@ def research_report_payload(report: m.ResearchReport) -> dict:
     }
 
 
-def mock_trend(stock: m.Stock) -> list[dict]:
+def _last_data_error(report: m.ResearchReport) -> str | None:
+    session = object_session(report)
+    if session is None or not report.data_sources:
+        return None
+    latest_log = (
+        session.query(m.DataFetchLog)
+        .filter(m.DataFetchLog.code == report.code, m.DataFetchLog.provider == report.data_sources[0], m.DataFetchLog.status == "FAILED")
+        .order_by(desc(m.DataFetchLog.started_at))
+        .first()
+    )
+    return latest_log.error_message if latest_log else None
+
+
+def trend_payload(stock: m.Stock) -> list[dict]:
+    session = object_session(stock)
+    if session is not None:
+        rows = (
+            session.query(m.PriceBar)
+            .filter(m.PriceBar.code == stock.code)
+            .order_by(desc(m.PriceBar.trade_date))
+            .limit(7)
+            .all()
+        )
+        if rows:
+            return [{"date": row.trade_date.isoformat(), "price": round(row.close, 2)} for row in reversed(rows)]
     base = stock.price
-    return [
-        {"date": "2026-04-19", "price": round(base * 0.975, 2)},
-        {"date": "2026-04-20", "price": round(base * 0.982, 2)},
-        {"date": "2026-04-21", "price": round(base * 0.971, 2)},
-        {"date": "2026-04-22", "price": round(base * 0.989, 2)},
-        {"date": "2026-04-23", "price": round(base * 0.996, 2)},
-        {"date": "2026-04-24", "price": round(base * 0.991, 2)},
-        {"date": "2026-04-25", "price": round(base, 2)},
-    ]
+    return [{"date": "N/A", "price": round(base, 2)}]
 
 
 def watchlist_payload(item: m.WatchlistItem) -> dict:
@@ -127,6 +158,8 @@ def monitoring_payload(item: m.MonitoringItem, latest_signal=None, latest_risk=N
         "enabled": item.enabled,
         "strategyId": item.strategy_id,
         "strategyName": item.strategy_name,
+        "strategyParams": item.strategy_params,
+        "riskParams": item.risk_params,
         "source": item.source,
         "reportId": item.report_id,
         "createdAt": dt_iso(item.created_at),
@@ -182,6 +215,15 @@ def order_payload(order: m.PaperOrder) -> dict:
         "orderType": order.order_type,
         "quantity": order.quantity,
         "price": order.price,
+        "rawPrice": order.raw_price,
+        "executedPrice": order.executed_price,
+        "slippageAmount": order.slippage_amount,
+        "commission": order.commission,
+        "stampTax": order.stamp_tax,
+        "totalFee": order.total_fee,
+        "estimatedAmount": order.estimated_amount,
+        "finalAmount": order.final_amount,
+        "netAmount": order.net_amount,
         "filledQuantity": order.filled_quantity,
         "avgPrice": order.avg_price,
         "status": order.status,

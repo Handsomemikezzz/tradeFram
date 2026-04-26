@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -74,6 +74,88 @@ class ResearchReport(Base):
     stock: Mapped[Stock] = relationship()
 
 
+class MarketQuote(Base):
+    __tablename__ = "market_quote"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    code: Mapped[str] = mapped_column(String(6), ForeignKey("stock.code"), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    change: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    change_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    volume: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    quote_time: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    stock: Mapped[Stock] = relationship()
+
+
+class PriceBar(Base):
+    __tablename__ = "price_bar"
+    __table_args__ = (UniqueConstraint("code", "trade_date", "source", name="uq_price_bar_code_date_source"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    code: Mapped[str] = mapped_column(String(6), ForeignKey("stock.code"), nullable=False, index=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    open: Mapped[float] = mapped_column(Float, nullable=False)
+    high: Mapped[float] = mapped_column(Float, nullable=False)
+    low: Mapped[float] = mapped_column(Float, nullable=False)
+    close: Mapped[float] = mapped_column(Float, nullable=False)
+    volume: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    stock: Mapped[Stock] = relationship()
+
+
+class FinancialSnapshot(Base):
+    __tablename__ = "financial_snapshot"
+    __table_args__ = (UniqueConstraint("code", "report_period", "source", name="uq_financial_snapshot_code_period_source"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    code: Mapped[str] = mapped_column(String(6), ForeignKey("stock.code"), nullable=False, index=True)
+    report_period: Mapped[str] = mapped_column(String(32), nullable=False, default="UNKNOWN")
+    pe: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    roe: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    revenue: Mapped[str] = mapped_column(String(64), nullable=False, default="0 亿")
+    profit: Mapped[str] = mapped_column(String(64), nullable=False, default="0 亿")
+    gross_margin: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    net_margin: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    stock: Mapped[Stock] = relationship()
+
+
+class DataFetchLog(Base):
+    __tablename__ = "data_fetch_log"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    code: Mapped[str | None] = mapped_column(String(6), index=True)
+    dataset: Mapped[str] = mapped_column(String(64), nullable=False, default="market_dataset")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="RUNNING")
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    rows_fetched: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class TradingCalendar(Base):
+    __tablename__ = "trading_calendar"
+    __table_args__ = (UniqueConstraint("exchange", "trade_date", "source", name="uq_trading_calendar_exchange_date_source"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    exchange: Mapped[str] = mapped_column(String(8), nullable=False, index=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    is_open: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+
 class WatchlistItem(Base):
     __tablename__ = "watchlist_item"
 
@@ -95,6 +177,8 @@ class MonitoringItem(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     strategy_id: Mapped[str] = mapped_column(String(64), nullable=False, default="strategy_mock_breakout")
     strategy_name: Mapped[str] = mapped_column(String(64), nullable=False, default="突破策略")
+    strategy_params: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    risk_params: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     source: Mapped[str] = mapped_column(String(64), nullable=False, default="USER")
     report_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
@@ -171,6 +255,15 @@ class PaperOrder(Base):
     order_type: Mapped[str] = mapped_column(String(16), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False)
+    raw_price: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    executed_price: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    slippage_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    commission: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    stamp_tax: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    total_fee: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    estimated_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    final_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    net_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     filled_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     avg_price: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
@@ -190,6 +283,15 @@ class PaperExecution(Base):
     code: Mapped[str] = mapped_column(String(6), ForeignKey("stock.code"), nullable=False)
     filled_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     avg_price: Mapped[float] = mapped_column(Float, nullable=False)
+    raw_price: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    executed_price: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    slippage_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    commission: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    stamp_tax: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    total_fee: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    estimated_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    final_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    net_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     executed_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
 

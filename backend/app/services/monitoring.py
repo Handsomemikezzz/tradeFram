@@ -42,6 +42,8 @@ def add_monitoring_item(db: Session, payload: MonitoringCreate) -> m.MonitoringI
         enabled=payload.enabled,
         strategy_id=strategy_id,
         strategy_name=strategy_name,
+        strategy_params=payload.strategyParams,
+        risk_params=payload.riskParams,
         source=payload.source,
         report_id=payload.reportId,
     )
