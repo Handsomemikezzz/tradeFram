@@ -34,7 +34,7 @@ def add_monitoring_item(db: Session, payload: MonitoringCreate) -> m.MonitoringI
     existing = db.query(m.MonitoringItem).filter(m.MonitoringItem.code == stock.code).first()
     if existing:
         raise api_error(409, "MONITORING_ITEM_ALREADY_EXISTS", f"{stock.name} 已在交易监控池中", {"id": existing.id, "code": stock.code})
-    strategy_id = payload.strategyId or ("strategy_mock_breakout" if stock.code == "300750" else "strategy_mock_ma_reversion")
+    strategy_id = payload.strategyId or ("strategy_ma_breakout" if stock.code == "300750" else "strategy_ma_reversion")
     strategy_name = payload.strategyName or ("突破策略" if stock.code == "300750" else "均线回归")
     item = m.MonitoringItem(
         id=new_id("mon"),

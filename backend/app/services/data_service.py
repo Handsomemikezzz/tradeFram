@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from .. import models as m
 from ..providers.akshare_provider import AkShareMarketDataProvider
 from ..providers.base import MarketDataProvider, ProviderDailyBar, ProviderFinancialSnapshot, ProviderStockProfile
-from ..providers.mock_provider import EmptyMarketDataProvider, MockMarketDataProvider
 from ..utils import dt_iso, new_id
 
 
@@ -52,14 +51,8 @@ def cache_ttl_minutes() -> int:
 
 
 def get_provider(provider_name: str | None = None) -> MarketDataProvider:
-    name = (provider_name or os.getenv("MARKET_DATA_PROVIDER") or "mock").strip().lower()
-    if name in {"mock", "mockprovider", "seed"}:
-        return MockMarketDataProvider()
-    if name in {"empty", "emptyprovider"}:
-        return EmptyMarketDataProvider()
+    name = (provider_name or os.getenv("MARKET_DATA_PROVIDER") or "akshare").strip().lower()
     if name in {"akshare", "ak"}:
-        if os.getenv("AKSHARE_ENABLED", "false").strip().lower() not in {"1", "true", "yes", "on"}:
-            raise DataFetchError("AKSHARE_DISABLED", "AkShare provider is disabled; set AKSHARE_ENABLED=true to use it", status_code=400)
         return AkShareMarketDataProvider()
     raise DataFetchError("UNKNOWN_DATA_PROVIDER", f"未知数据源 {provider_name}", status_code=400)
 

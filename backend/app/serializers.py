@@ -64,6 +64,7 @@ def research_report_payload(report: m.ResearchReport) -> dict:
     provider = report.data_sources[0] if report.data_sources else "UNKNOWN"
     used_cache = "Local Cache" in report.data_sources
     data_stale = "Stale Cache" in report.data_sources
+    financial = _latest_financial(report)
     return {
         "reportId": report.id,
         "code": report.code,
@@ -85,19 +86,12 @@ def research_report_payload(report: m.ResearchReport) -> dict:
         "updateFrequency": "10min",
         "quote": quote_payload(stock),
         "trend": trend_payload(stock),
-        "financialSnapshot": {
-            "revenue": stock.revenue,
-            "profit": stock.profit,
-            "grossMargin": stock.gross_margin,
-            "netMargin": stock.net_margin,
-            "roe": stock.roe,
-            "pe": stock.pe,
-        },
+        "financialSnapshot": financial_snapshot_payload(financial) if financial else None,
         "report": {
             "overview": report.overview,
             "keyInsights": report.key_insights,
             "worthFurtherResearch": report.worth_further_research,
-            "aiConfidence": report.ai_confidence,
+            "aiConfidence": None,
             "dataCompleteness": report.data_completeness,
             "aiDisclaimer": report.ai_disclaimer,
             "risks": report.risks,
@@ -105,6 +99,29 @@ def research_report_payload(report: m.ResearchReport) -> dict:
             "newsItems": report.news_items,
         },
     }
+
+
+def financial_snapshot_payload(financial: m.FinancialSnapshot) -> dict:
+    return {
+        "revenue": financial.revenue,
+        "profit": financial.profit,
+        "grossMargin": financial.gross_margin,
+        "netMargin": financial.net_margin,
+        "roe": financial.roe,
+        "pe": financial.pe,
+    }
+
+
+def _latest_financial(report: m.ResearchReport) -> m.FinancialSnapshot | None:
+    session = object_session(report)
+    if session is None or not report.data_sources:
+        return None
+    return (
+        session.query(m.FinancialSnapshot)
+        .filter(m.FinancialSnapshot.code == report.code, m.FinancialSnapshot.source == report.data_sources[0])
+        .order_by(desc(m.FinancialSnapshot.fetched_at))
+        .first()
+    )
 
 
 def _last_data_error(report: m.ResearchReport) -> str | None:
@@ -130,10 +147,9 @@ def trend_payload(stock: m.Stock) -> list[dict]:
             .limit(7)
             .all()
         )
-        if rows:
-            return [{"date": row.trade_date.isoformat(), "price": round(row.close, 2)} for row in reversed(rows)]
-    base = stock.price
-    return [{"date": "N/A", "price": round(base, 2)}]
+    if rows:
+        return [{"date": row.trade_date.isoformat(), "price": round(row.close, 2)} for row in reversed(rows)]
+    return []
 
 
 def watchlist_payload(item: m.WatchlistItem) -> dict:

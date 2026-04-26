@@ -9,7 +9,7 @@
 
 - 路由：`src/App.tsx`
 - 类型：`src/types.ts`
-- Mock：`src/services/mockData.ts`、`src/services/mockService.ts`
+- 数据源：AkShare-only；默认测试使用 AkShare-shaped fixture，不依赖外网
 - 页面：`src/pages/Dashboard.tsx`、`src/pages/Research.tsx`、`src/pages/ReportDetail.tsx`、`src/pages/TradingConsole.tsx`、`src/pages/History.tsx`
 - 组件：`src/components/dashboard/*`、`src/components/research/*`、`src/components/trading/*`、`src/components/history/*`、`src/components/layout/*`
 
@@ -120,7 +120,7 @@
 
 - Dashboard KPI：观察池监控数、今日信号数、风控拦截数、模拟账户净值/月收益。
 - 今日待处理事项：风控拦截、数据过期、报告失败、暂停股票数。
-- 交易监控池摘要表：当前前端误用 `MOCK_RESEARCH_RECORDS` 展示，应改为真实监控池/研究摘要。
+- 交易监控池摘要表：使用真实监控池/研究摘要。
 - 系统日志：`SystemLog[]`。
 - 快速研究统计：已完成研究数、待处理任务数。
 - 顶栏/侧栏系统状态：系统状态、数据源连接、AI 服务状态、交易日时间、数据延迟。
@@ -262,7 +262,7 @@ Response：
         "module": "DataSync",
         "code": null,
         "event": "行情更新成功",
-        "detail": "成功从 Tushare 同步 1500 只股票日线数据",
+        "detail": "成功从 AkShare 同步单只股票日线数据",
         "relId": null
       }
     ],
@@ -584,14 +584,14 @@ P2：Clean Logs
 |---|---|---|
 | `overview` 结论摘要 | AI 核心结论、Key Insights、值得继续研究、AI 置信度、数据完整度、AI 局限性说明、风险提示 | `report.overview` / `report.risks` |
 | `business` 主营业务 | 主营构成占比 | `report.businessSegments` |
-| `financial` 财务概览 | 营收、净利润、毛利率、净利率、ROE、PE | `financialSnapshot` |
-| `news` 新闻公告 | 近期公告/动态/财务新闻 | `newsItems` |
+| `financial` 财务概览 | 营收、净利润、毛利率、净利率、ROE、PE；缺失时为 null | `financialSnapshot` |
+| `news` 新闻公告 | 当前无真实来源时为空数组 | `newsItems` |
 
 ### 用户动作
 
 | 动作 | 当前前端行为 | 推荐 API |
 |---|---|---|
-| 进入 `/research/:code` | 从 `MOCK_STOCKS[code]` 取值，找不到 fallback 到 600519 | `GET /research/reports/by-code/{code}`；找不到应 404，不应静默 fallback |
+| 进入 `/research/:code` | 查询后端报告 | `GET /research/reports/by-code/{code}`；找不到应 404，不应静默 fallback |
 | 点击「加入观察池」 | toast | `POST /watchlist/items` |
 | 点击「监控此股」 | toast | `POST /monitoring-pool/items` |
 | 切换 Tabs | 前端 Base UI Tabs | 无需 API；也可按需懒加载章节 |
@@ -625,7 +625,7 @@ Response：
     "industry": "白酒",
     "generatedAt": "2026-04-25T15:00:00+08:00",
     "researchBasePeriod": "2026-Q1",
-    "dataSources": ["Tushare", "AkShare"],
+    "dataSources": ["AkShare", "Provider Refresh"],
     "updateFrequency": "10min",
     "quote": {
       "price": 1650.5,
@@ -654,26 +654,14 @@ Response：
         "直销占比提升：渠道改革成效显著，利润率进一步优化。"
       ],
       "worthFurtherResearch": true,
-      "aiConfidence": 0.92,
+      "aiConfidence": null,
       "dataCompleteness": 0.98,
-      "aiDisclaimer": "本报告由算法模型生成，仅供参考，不构成投资建议。",
+      "aiDisclaimer": "本报告仅整理 AkShare 返回的公开数据；当前未接入真实 AI 推理、真实券商或人工投研校验，不构成投资建议。",
       "risks": [
         { "title": "政策风险", "description": "行业监管政策收紧可能影响估值水平。", "severity": "MEDIUM" }
       ],
-      "businessSegments": [
-        { "name": "茅台酒", "percent": 88.0 },
-        { "name": "系列酒", "percent": 11.5 },
-        { "name": "其他业务", "percent": 0.5 }
-      ],
-      "newsItems": [
-        {
-          "id": "news_001",
-          "title": "贵州茅台：关于分红派息的公告",
-          "date": "2026-04-18",
-          "type": "ANNOUNCEMENT",
-          "url": null
-        }
-      ]
+      "businessSegments": [],
+      "newsItems": []
     }
   }
 }
@@ -936,7 +924,7 @@ Response：
         "rule": "DATA_INTEGRITY",
         "label": "数据完整性",
         "passed": true,
-        "description": "行情源连接正常 (Tushare)"
+        "description": "行情源连接正常 (AkShare)"
       },
       {
         "rule": "DUPLICATE_ORDER_PROTECTION",
@@ -1131,7 +1119,7 @@ P2：策略配置高级参数
 - 持仓：`Holding[]`。
 - 订单：`Order[]`。
 - 风控记录：`RiskRecord[]`。
-- 系统日志：`SystemLog[]`，当前日志 Tab 使用 `MOCK_LOGS.concat(MOCK_LOGS)` 人为重复。
+- 系统日志：`SystemLog[]`，来自后端审计日志。
 - 搜索/筛选：当前 UI 存在但无状态、无 API。
 
 ### Tabs / 隐藏交互
@@ -1381,7 +1369,7 @@ P2：高级筛选条件保存
 
 ---
 
-# 5. Mock 数据结构与后端实体映射
+# 5. AkShare 数据结构与后端实体映射
 
 ## 5.1 `Stock`
 
@@ -1661,7 +1649,7 @@ Response：
 | History 筛选按钮 | Filter icon | 无事件 | P1 Filter Drawer，筛选 `status/side/rule/level/from/to` |
 | Trading 监控池 | 批量启用 | 无事件 | `PATCH /monitoring-pool/items/batch` |
 | Dashboard 顶栏 | 导出日报 | 无事件 | `POST /exports/daily-report` |
-| 所有表格 | 无分页控件 | 全量 mock map | P0 API 必须返回分页结构，前端后续补分页控件 |
+| 所有表格 | 无分页控件 | 后端分页响应 | P0 API 必须返回分页结构，前端后续补分页控件 |
 
 ---
 
@@ -1690,23 +1678,23 @@ Response：
 | Dashboard 今日事项 | 2、0、1、3 | `GET /dashboard/overview.tasks` |
 | Dashboard 快速研究统计 | 已完成 124、待处理 0 | `GET /dashboard/overview.quickResearchStats` |
 | Dashboard 风险提示文案 | 固定文案 | 可后端配置或前端常量；建议后端返回版本化 disclaimer |
-| Dashboard 监控池表 | 使用 `MOCK_RESEARCH_RECORDS` | `GET /dashboard/monitoring-summary` |
-| TopBar 时间/状态/延迟/交易日 | `new Date()`、运行中、Tushare 35ms、SH/SZ 交易日 | `GET /system/status` + `GET /data-sources/health` |
+| Dashboard 监控池表 | 后端监控池摘要 | `GET /dashboard/monitoring-summary` |
+| TopBar 时间/状态/延迟/交易日 | `new Date()`、运行中、AkShare 延迟、SH/SZ 交易日 | `GET /system/status` + `GET /data-sources/health` |
 | Sidebar 数据源/AI 服务 | 已连接/正常 | `GET /system/status` |
 | Research 研究统计 | 142、38、常用板块 | `GET /research/stats` |
 | Research 任务进度 | setInterval 模拟 | `GET /research/tasks/{taskId}` |
 | Research 完成跳转 | 固定 `/research/600519` | 后端返回 `reportId/code/redirectTo` |
 | ReportDetail 7 日走势 | `CHART_DATA` | `GET /stocks/{code}/price-bars?range=7d` 或报告详情内返回 |
-| ReportDetail AI 结论/Key Insights/风险 | 写死模板 | `research_report` |
-| ReportDetail 主营业务占比 | 茅台酒 88%、系列酒 11.5%、其他 0.5% | `research_report.businessSegments` |
-| ReportDetail 新闻公告 | 写死 3 条 | `research_report.newsItems` 或 `GET /stocks/{code}/news` |
+| ReportDetail 结论/Key Insights/风险 | 基于 AkShare 可得数据整理 | `research_report` |
+| ReportDetail 主营业务占比 | 无真实来源时为空数组 | `research_report.businessSegments` |
+| ReportDetail 新闻公告 | 无真实来源时为空数组 | `research_report.newsItems` |
 | ReportDetail 页脚 | 数据源、10min、2024-Q1 | 报告详情元数据 |
 | Trading 风控状态 | 写死 5 条规则 | `GET /risk/system-status` |
 | Trading 链路追踪 | 写死步骤与状态 | `GET /execution-traces/latest` |
 | Trading 手动巡检 summary | setTimeout 后写死 120/3/2/1/2/1/1.2s | `POST /paper-trading/runs` 返回 summary |
 | Trading refresh 时间 | `15:00:25` | 监控池 API `lastRefreshedAt` |
 | History 账户摘要 | 1,250,300 等 | `GET /portfolio/account-summary` |
-| History logs | `MOCK_LOGS.concat(MOCK_LOGS)` | `GET /logs` |
+| History logs | 后端审计日志 | `GET /logs` |
 
 ---
 

@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
+import pandas as pd
 import pytest
 from sqlalchemy.orm import Session
 
@@ -10,8 +11,9 @@ from backend.app.main import app
 from backend.app.providers.akshare_provider import AkShareMarketDataProvider
 from backend.app.providers.base import MarketDataProvider, ProviderDailyBar, ProviderFinancialSnapshot, ProviderStockProfile
 from backend.app.seed import seed_database
-from backend.app.services.data_service import DataFetchError, fetch_market_dataset, normalize_stock_code
+from backend.app.services.data_service import DataFetchError, fetch_market_dataset, get_provider, normalize_stock_code
 from backend.app.services.paper_trading import generate_ma_signal
+from tests.akshare_fixture import install_akshare_fixture, prepare_akshare_stock
 
 
 def reset_database() -> None:
@@ -99,6 +101,102 @@ def test_stock_code_normalization():
         normalize_stock_code("ABC123")
 
 
+def test_seed_keeps_system_state_without_stock_or_price_data():
+    reset_database()
+    with SessionLocal() as db:
+        assert db.query(m.Stock).count() == 0
+        assert db.query(m.PriceBar).count() == 0
+        assert db.get(m.PaperAccount, "paper_default") is not None
+        assert db.get(m.PaperTradingEngineState, "default") is not None
+        assert db.get(m.DataSourceHealth, "AkShare") is not None
+        assert db.get(m.DataSourceHealth, "Tushare") is None
+        assert db.get(m.DataSourceHealth, "MockProvider") is None
+
+
+def test_get_provider_only_accepts_akshare(monkeypatch):
+    monkeypatch.setenv("AKSHARE_ENABLED", "true")
+    assert get_provider().name == "AkShare"
+    assert get_provider("akshare").name == "AkShare"
+    with pytest.raises(DataFetchError) as exc:
+        get_provider("mock")
+    assert exc.value.code == "UNKNOWN_DATA_PROVIDER"
+
+
+def test_akshare_fixture_fetches_and_persists_market_dataset(monkeypatch):
+    reset_database()
+    fake = install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        dataset = fetch_market_dataset(db, "300750")
+        assert dataset["provider"] == "AkShare"
+        assert dataset["stock"].name == "宁德时代"
+        assert len(dataset["bars"]) == 60
+        assert dataset["financial"] is not None
+        assert fake.profile_calls == 1
+        assert fake.bar_calls == 1
+        assert db.query(m.Stock).filter(m.Stock.code == "300750").count() == 1
+        assert db.query(m.PriceBar).filter(m.PriceBar.code == "300750", m.PriceBar.source == "AkShare").count() == 60
+        assert db.query(m.FinancialSnapshot).filter(m.FinancialSnapshot.code == "300750", m.FinancialSnapshot.source == "AkShare").count() == 1
+
+
+def test_akshare_profile_falls_back_to_exchange_name_table(monkeypatch):
+    class FallbackAkShare:
+        def stock_individual_info_em(self, symbol: str):
+            raise ConnectionError("profile endpoint disconnected")
+
+        def stock_info_sh_name_code(self):
+            return pd.DataFrame(
+                [
+                    {
+                        "证券代码": "600879",
+                        "证券简称": "航天电子",
+                        "公司全称": "航天时代电子技术股份有限公司",
+                        "上市日期": "1995-11-15",
+                    }
+                ]
+            )
+
+    monkeypatch.setattr("backend.app.providers.akshare_provider._akshare", lambda: FallbackAkShare())
+
+    profile = AkShareMarketDataProvider().get_stock_profile("600879")
+
+    assert profile is not None
+    assert profile.code == "600879"
+    assert profile.symbol == "600879.SH"
+    assert profile.name == "航天电子"
+    assert profile.market == "上证A股"
+    assert profile.industry == "UNKNOWN"
+
+
+def test_akshare_daily_bars_fall_back_to_sina_daily(monkeypatch):
+    class FallbackAkShare:
+        def stock_zh_a_hist(self, **kwargs):
+            raise ConnectionError("eastmoney kline endpoint disconnected")
+
+        def stock_zh_a_daily(self, **kwargs):
+            return pd.DataFrame(
+                [
+                    {
+                        "date": "2026-04-24",
+                        "open": 10.0,
+                        "high": 11.0,
+                        "low": 9.5,
+                        "close": 10.8,
+                        "volume": 10000,
+                        "amount": 108000,
+                    }
+                ]
+            )
+
+    monkeypatch.setattr("backend.app.providers.akshare_provider._akshare", lambda: FallbackAkShare())
+
+    bars = AkShareMarketDataProvider().get_daily_bars("600879", date(2026, 1, 1), date(2026, 4, 26))
+
+    assert len(bars) == 1
+    assert bars[0].code == "600879"
+    assert bars[0].trade_date == date(2026, 4, 24)
+    assert bars[0].close == 10.8
+
+
 def test_data_source_failure_writes_data_fetch_log():
     reset_database()
     with SessionLocal() as db:
@@ -153,19 +251,52 @@ def test_expired_cache_refreshes_provider(monkeypatch):
         assert provider.bar_calls == 2
 
 
-def test_no_daily_data_research_task_fails_without_creating_report():
+def test_unknown_provider_query_is_rejected():
     reset_database()
     client = TestClient(app)
-    response = client.post("/api/v1/research/tasks", json={"code": "300750", "options": {"provider": "empty"}})
+    response = client.post("/api/v1/research/tasks", json={"code": "300750", "options": {"provider": "mock"}})
+    body = response.json()
+    assert response.status_code == 400
+    assert body["success"] is False
+    assert body["error"]["code"] == "UNKNOWN_DATA_PROVIDER"
+
+
+def test_no_daily_data_research_task_fails_without_creating_report(monkeypatch):
+    reset_database()
+    install_akshare_fixture(monkeypatch, bars={"300750": []})
+    client = TestClient(app)
+    response = client.post("/api/v1/research/tasks", json={"code": "300750"})
     body = response.json()
     assert response.status_code == 422
     assert body["success"] is False
     assert body["error"]["code"] == "NO_DAILY_DATA"
 
 
-def test_no_daily_data_signal_engine_returns_hold():
+def test_research_report_uses_real_akshare_data_without_mock_content(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch, financial=False)
+    client = TestClient(app)
+    created = client.post("/api/v1/research/tasks", json={"code": "600879"}).json()
+    assert created["success"] is True, created
+
+    report = client.get("/api/v1/research/reports/by-code/600879").json()
+    assert report["success"] is True, report
+    data = report["data"]
+    rendered = str(data)
+    assert data["dataMeta"]["provider"] == "AkShare"
+    assert data["financialSnapshot"] is None
+    assert data["report"]["newsItems"] == []
+    assert data["report"]["businessSegments"] == []
+    assert data["report"]["aiConfidence"] is None
+    assert "mock" not in rendered.lower()
+    assert "模板化" not in rendered
+
+
+def test_no_daily_data_signal_engine_returns_hold(monkeypatch):
+    reset_database()
+    install_akshare_fixture(monkeypatch)
     with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
         db.query(m.PriceBar).delete()
         db.commit()
         stock = db.get(m.Stock, "300750")

@@ -99,6 +99,17 @@ export default function ReportDetail() {
   }
 
   const isPositive = report.quote.change >= 0;
+  const aiConfidenceLabel = report.report.aiConfidence === null ? '暂无' : `${Math.round(report.report.aiConfidence * 100)}%`;
+  const financialItems = report.financialSnapshot
+    ? [
+        { label: '营业收入', value: report.financialSnapshot.revenue },
+        { label: '净利润', value: report.financialSnapshot.profit },
+        { label: '毛利率', value: `${report.financialSnapshot.grossMargin}%` },
+        { label: '净利率', value: `${report.financialSnapshot.netMargin}%` },
+        { label: 'ROE', value: `${report.financialSnapshot.roe}%` },
+        { label: '静态市盈率', value: `${report.financialSnapshot.pe}x` },
+      ]
+    : [];
 
   return (
     <div className="space-y-4">
@@ -161,7 +172,7 @@ export default function ReportDetail() {
              </CardTitle>
           </CardHeader>
           <CardContent className="p-4 h-[160px]">
-             <ResponsiveContainer width="100%" height="100%">
+             {report.trend.length > 0 ? <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={report.trend.map((item) => ({ name: item.date.slice(5), price: item.price }))}>
                   <defs>
                     <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
@@ -175,7 +186,7 @@ export default function ReportDetail() {
                   <Tooltip />
                   <Area type="monotone" dataKey="price" stroke={isPositive ? "#ef4444" : "#22c55e"} strokeWidth={2} fillOpacity={1} fill="url(#colorPrice)" />
                 </AreaChart>
-             </ResponsiveContainer>
+             </ResponsiveContainer> : <div className="flex h-full items-center justify-center text-[11px] text-gray-400">暂无可用日线走势</div>}
           </CardContent>
         </Card>
 
@@ -218,7 +229,7 @@ export default function ReportDetail() {
                     </div>
                     <div className="grid grid-cols-2 gap-2 mt-4 text-[10px]">
                       <div className="bg-gray-100 p-2 rounded"><span className="text-gray-500">值得继续研究:</span><span className="font-bold ml-1 text-green-700">{report.report.worthFurtherResearch ? '是' : '否'}</span></div>
-                      <div className="bg-gray-100 p-2 rounded"><span className="text-gray-500">AI 置信度:</span><span className="font-bold ml-1 text-blue-700">{Math.round(report.report.aiConfidence * 100)}%</span></div>
+                      <div className="bg-gray-100 p-2 rounded"><span className="text-gray-500">AI 置信度:</span><span className="font-bold ml-1 text-blue-700">{aiConfidenceLabel}</span></div>
                       <div className="bg-gray-100 p-2 rounded"><span className="text-gray-500">数据完整度:</span><span className="font-bold ml-1 text-blue-700">{Math.round(report.report.dataCompleteness * 100)}%</span></div>
                     </div>
                     <div className="text-[9px] text-gray-400 mt-2 italic">AI 局限性说明：{report.report.aiDisclaimer}</div>
@@ -248,16 +259,13 @@ export default function ReportDetail() {
               <Card className="border-none shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)]">
                 <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-500" />财务摘要 (12-Month Trailing)</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                    {[
-                      { label: '营业收入', value: report.financialSnapshot.revenue },
-                      { label: '净利润', value: report.financialSnapshot.profit },
-                      { label: '毛利率', value: `${report.financialSnapshot.grossMargin}%` },
-                      { label: '净利率', value: `${report.financialSnapshot.netMargin}%` },
-                      { label: 'ROE', value: `${report.financialSnapshot.roe}%` },
-                      { label: '静态市盈率', value: `${report.financialSnapshot.pe}x` }
-                    ].map(item => <div key={item.label} className="flex flex-col group"><span className="text-[10px] uppercase font-bold text-muted-foreground mb-1 group-hover:text-primary transition-colors">{item.label}</span><span className="text-lg font-bold tracking-tight">{item.value}</span></div>)}
-                  </div>
+                  {financialItems.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                      {financialItems.map(item => <div key={item.label} className="flex flex-col group"><span className="text-[10px] uppercase font-bold text-muted-foreground mb-1 group-hover:text-primary transition-colors">{item.label}</span><span className="text-lg font-bold tracking-tight">{item.value}</span></div>)}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400">AkShare 当前未返回可用财务摘要。</div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -266,6 +274,7 @@ export default function ReportDetail() {
                <Card className="border-none shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)]">
                 <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-blue-500" />主营构成分析</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
+                  {report.report.businessSegments.length === 0 && <div className="text-sm text-gray-400">暂无真实主营构成数据。</div>}
                   {report.report.businessSegments.map((segment) => (
                     <div className="space-y-2" key={segment.name}>
                       <div className="flex justify-between text-xs mb-1"><span className="font-bold">{segment.name}</span><span className="font-mono">{segment.percent}%</span></div>
@@ -280,6 +289,7 @@ export default function ReportDetail() {
                <Card className="border-none shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)]">
                 <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Newspaper className="w-5 h-5 text-slate-600" />近期相关咨讯</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
+                  {report.report.newsItems.length === 0 && <div className="text-sm text-gray-400">暂无真实新闻公告数据。</div>}
                   {report.report.newsItems.map(n => (
                     <div key={n.id} className="flex items-center justify-between p-3 border rounded-xl hover:bg-zinc-50 cursor-pointer transition-colors group">
                       <div className="flex items-center gap-3"><Badge variant="outline" className="text-[10px] px-1.5 h-5 bg-zinc-50 group-hover:bg-white">{newsTypeLabel(n.type)}</Badge><span className="text-xs font-bold">{n.title}</span></div>

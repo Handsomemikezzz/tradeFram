@@ -44,7 +44,7 @@ export const Sidebar = () => {
     };
   }, []);
 
-  const tushare = dataSources.find((source) => source.name === 'Tushare');
+  const akshare = dataSources.find((source) => source.name === 'AkShare');
   const aiService = dataSources.find((source) => source.name === 'AI Service');
 
   return (
@@ -77,8 +77,8 @@ export const Sidebar = () => {
 
       <div className="p-6 text-[11px] text-gray-500 space-y-2">
         <div className="flex justify-between">
-          <span>数据源 Tushare</span> 
-          <span className="text-green-500 underline underline-offset-2">{tushare ? dataSourceStatusLabel(tushare.status) : '加载中'}</span>
+          <span>数据源 AkShare</span>
+          <span className="text-green-500 underline underline-offset-2">{akshare ? dataSourceStatusLabel(akshare.status) : '加载中'}</span>
         </div>
         <div className="flex justify-between">
           <span>AI 服务</span> 

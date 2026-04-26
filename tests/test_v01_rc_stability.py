@@ -13,6 +13,7 @@ from backend.app.main import app
 from backend.app.providers.base import MarketDataProvider, ProviderDailyBar, ProviderFinancialSnapshot, ProviderStockProfile
 from backend.app.seed import seed_database
 from backend.app.services.data_service import fetch_market_dataset
+from tests.akshare_fixture import install_akshare_fixture, prepare_akshare_stock
 
 
 def reset_database() -> None:
@@ -53,8 +54,11 @@ class FailingRcProvider(CountingProvider):
         raise RuntimeError("rc provider failed")
 
 
-def test_buy_quantity_must_be_a_share_lot_size():
+def test_buy_quantity_must_be_a_share_lot_size(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
     client = TestClient(app)
     assert_ok(
         client.post(
@@ -69,9 +73,11 @@ def test_buy_quantity_must_be_a_share_lot_size():
     assert any(risk["rule"] == "A_SHARE_LOT_SIZE" and risk["status"] == "BLOCKED" for risk in risks)
 
 
-def test_buy_cash_insufficient_is_blocked():
+def test_buy_cash_insufficient_is_blocked(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
     with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
         account = db.get(m.PaperAccount, "paper_default")
         account.cash = 1
         db.commit()
@@ -84,8 +90,11 @@ def test_buy_cash_insufficient_is_blocked():
     assert any(risk["rule"] == "CASH_AVAILABLE" and risk["status"] == "BLOCKED" for risk in risks)
 
 
-def test_sell_more_than_available_quantity_is_blocked():
+def test_sell_more_than_available_quantity_is_blocked(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "601318")
     client = TestClient(app)
     assert_ok(client.post("/api/v1/monitoring-pool/items", json={"code": "601318", "enabled": True, "strategyParams": {"forceSignal": "SELL", "orderQuantity": 100}}))
 
@@ -95,8 +104,11 @@ def test_sell_more_than_available_quantity_is_blocked():
     assert any(risk["rule"] == "SELL_POSITION_AVAILABLE" and risk["status"] == "BLOCKED" for risk in risks)
 
 
-def test_t_plus_one_buy_position_is_not_immediately_sellable():
+def test_t_plus_one_buy_position_is_not_immediately_sellable(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
     client = TestClient(app)
     item = assert_ok(client.post("/api/v1/monitoring-pool/items", json={"code": "300750", "enabled": True, "strategyParams": {"forceSignal": "BUY", "orderQuantity": 100}}))
     buy_run = assert_ok(client.post("/api/v1/paper-trading/runs", json={"trigger": "MANUAL", "scope": {"monitoringItemIds": [item["id"]], "enabledOnly": True}}))
@@ -116,9 +128,11 @@ def test_t_plus_one_buy_position_is_not_immediately_sellable():
     assert any(risk["rule"] == "SELL_POSITION_AVAILABLE" and "T+1" in risk["reason"] for risk in risks)
 
 
-def test_no_market_data_blocks_execution():
+def test_no_market_data_blocks_execution(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
     with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
         db.query(m.PriceBar).filter(m.PriceBar.code == "300750").delete()
         db.commit()
     client = TestClient(app)
@@ -129,10 +143,13 @@ def test_no_market_data_blocks_execution():
     assert any(risk["rule"] == "DATA_UNAVAILABLE" and risk["status"] == "BLOCKED" for risk in risks)
 
 
-def test_data_status_api_returns_rc_diagnostics():
+def test_data_status_api_returns_rc_diagnostics(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
     client = TestClient(app)
-    status = assert_ok(client.get("/api/v1/data/stocks/300750/status?provider=mock"))
+    status = assert_ok(client.get("/api/v1/data/stocks/300750/status?provider=akshare"))
     for key in [
         "provider",
         "code",
@@ -174,8 +191,11 @@ def test_alembic_baseline_can_create_tables(tmp_path, monkeypatch):
     assert {"stock", "paper_order", "paper_execution", "price_bar", "data_fetch_log"}.issubset(tables)
 
 
-def test_buy_fee_fields_and_cash_deduction_are_correct():
+def test_buy_fee_fields_and_cash_deduction_are_correct(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
     client = TestClient(app)
     item = assert_ok(
         client.post(
@@ -201,9 +221,11 @@ def test_buy_fee_fields_and_cash_deduction_are_correct():
     assert round(account["availableCash"], 2) == round(1_000_000 - order["netAmount"], 2)
 
 
-def test_sell_fee_fields_and_cash_credit_are_correct():
+def test_sell_fee_fields_and_cash_credit_are_correct(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
     with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
         account = db.get(m.PaperAccount, "paper_default")
         stock = db.get(m.Stock, "300750")
         db.add(m.Position(id=f"pos_{account.id}_300750", account_id=account.id, code="300750", quantity=200, available=200, cost_price=100, current_price=stock.price, market_value=200 * stock.price))
@@ -234,6 +256,9 @@ def test_sell_fee_fields_and_cash_credit_are_correct():
 
 def test_strict_trading_time_blocks_and_demo_mode_allows(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
     client = TestClient(app)
     item = assert_ok(client.post("/api/v1/monitoring-pool/items", json={"code": "300750", "enabled": True, "strategyParams": {"forceSignal": "BUY", "orderQuantity": 100}}))
 
@@ -245,6 +270,9 @@ def test_strict_trading_time_blocks_and_demo_mode_allows(monkeypatch):
     assert any(risk["rule"] == "TRADING_TIME" and risk["status"] == "BLOCKED" for risk in risks)
 
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
     client = TestClient(app)
     item = assert_ok(client.post("/api/v1/monitoring-pool/items", json={"code": "300750", "enabled": True, "strategyParams": {"forceSignal": "BUY", "orderQuantity": 100}}))
     monkeypatch.setenv("STRICT_TRADING_TIME_CHECK", "false")

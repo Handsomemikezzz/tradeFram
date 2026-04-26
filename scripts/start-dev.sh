@@ -23,6 +23,12 @@ if [[ -f .env ]]; then
   set +a
 fi
 
+if [[ "${AKSHARE_BYPASS_PROXY:-true}" == "true" ]]; then
+  AKSHARE_NO_PROXY_DEFAULT="localhost,127.0.0.1,::1,push2.eastmoney.com,push2his.eastmoney.com,*.eastmoney.com,eastmoney.com,finance.sina.com.cn,*.sina.com.cn,proxy.finance.qq.com,*.qq.com"
+  export NO_PROXY="${NO_PROXY:+$NO_PROXY,}$AKSHARE_NO_PROXY_DEFAULT"
+  export no_proxy="${no_proxy:+$no_proxy,}$AKSHARE_NO_PROXY_DEFAULT"
+fi
+
 BACKEND_PID=""
 FRONTEND_PID=""
 cleanup() {

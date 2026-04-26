@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from backend.app.database import Base, engine
 from backend.app.main import app
 from backend.app.seed import seed_database
+from backend.app.database import SessionLocal
+from tests.akshare_fixture import install_akshare_fixture, prepare_akshare_stock
 
 
 def reset_database() -> None:
@@ -32,8 +34,9 @@ def assert_error(response, status_code: int, code: str):
     return body
 
 
-def test_invalid_stock_code_returns_validation_or_not_found_error():
+def test_invalid_stock_code_returns_validation_or_not_found_error(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch, profiles={})
     client = TestClient(app)
 
     invalid_format = client.post("/api/v1/research/tasks", json={"code": "ABC123"})
@@ -43,8 +46,11 @@ def test_invalid_stock_code_returns_validation_or_not_found_error():
     assert_error(unknown_stock, 404, "STOCK_NOT_FOUND")
 
 
-def test_duplicate_watchlist_and_monitoring_items_return_errors():
+def test_duplicate_watchlist_and_monitoring_items_return_errors(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
     client = TestClient(app)
 
     assert_ok(client.post("/api/v1/watchlist/items", json={"code": "300750"}))
@@ -54,8 +60,11 @@ def test_duplicate_watchlist_and_monitoring_items_return_errors():
     assert_error(client.post("/api/v1/monitoring-pool/items", json={"code": "300750", "enabled": True}), 409, "MONITORING_ITEM_ALREADY_EXISTS")
 
 
-def test_risk_blocked_does_not_create_order_for_blocked_signal():
+def test_risk_blocked_does_not_create_order_for_blocked_signal(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "000858")
     client = TestClient(app)
 
     assert_ok(client.post("/api/v1/monitoring-pool/items", json={"code": "000858", "enabled": True}))
@@ -81,15 +90,19 @@ def test_paper_trading_run_with_no_monitoring_stocks_completes_without_side_effe
     assert assert_ok(client.get("/api/v1/orders"))["items"] == []
 
 
-def test_report_not_found_returns_404():
+def test_report_not_found_returns_404(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
+    with SessionLocal() as db:
+        prepare_akshare_stock(db, "300750")
     client = TestClient(app)
 
     assert_error(client.get("/api/v1/research/reports/by-code/300750"), 404, "REPORT_NOT_FOUND")
 
 
-def test_p0b_endpoints_return_expected_shapes():
+def test_p0b_endpoints_return_expected_shapes(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
     client = TestClient(app)
 
     assert_ok(client.post("/api/v1/research/tasks", json={"code": "300750"}))

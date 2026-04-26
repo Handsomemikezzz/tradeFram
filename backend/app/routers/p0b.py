@@ -36,8 +36,8 @@ def risk_system_status(db: Session = Depends(get_db)):
     position_ratio = round(position_value / total_assets * 100, 2) if total_assets else 0
     sources_with_errors = db.query(m.DataSourceHealth).filter(m.DataSourceHealth.status == "ERROR").count()
     rules = [
-        {"rule": "TRADING_TIME", "label": "是否交易时间", "passed": True, "description": "第一阶段 mock：允许手动巡检，不接真实交易时段"},
-        {"rule": "DATA_INTEGRITY", "label": "数据完整性", "passed": sources_with_errors == 0, "description": "本地 seed mock 数据源状态"},
+        {"rule": "TRADING_TIME", "label": "是否交易时间", "passed": True, "description": "允许手动巡检；所有执行仍仅限 PAPER_TRADING_ONLY"},
+        {"rule": "DATA_INTEGRITY", "label": "数据完整性", "passed": sources_with_errors == 0, "description": "AkShare 数据源与本地缓存状态"},
         {"rule": "DUPLICATE_ORDER_PROTECTION", "label": "重复订单保护", "passed": True, "description": "同一 run 内由后端串行创建模拟订单"},
         {"rule": "MAX_SINGLE_STOCK_POS", "label": "单股持仓限制", "passed": True, "description": "最高 50,000 RMB / 股"},
         {"rule": "TOTAL_POSITION_LIMIT", "label": "总仓位警戒值", "passed": position_ratio <= 80, "description": f"状态: {'安全' if position_ratio <= 80 else '警戒'}, 当前 {position_ratio}%"},

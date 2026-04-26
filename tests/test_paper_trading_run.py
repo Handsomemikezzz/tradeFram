@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from backend.app.main import app
 from backend.app.database import Base, engine
 from backend.app.seed import seed_database
+from tests.akshare_fixture import install_akshare_fixture
 
 
 def reset_database() -> None:
@@ -19,8 +20,9 @@ def unwrap(response):
     return payload["data"]
 
 
-def test_paper_trading_run_executes_ordered_mock_trade_loop():
+def test_paper_trading_run_executes_ordered_akshare_trade_loop(monkeypatch):
     reset_database()
+    install_akshare_fixture(monkeypatch)
     client = TestClient(app)
 
     task = unwrap(client.post("/api/v1/research/tasks", json={"code": "300750"}))

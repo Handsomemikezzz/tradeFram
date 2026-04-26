@@ -19,7 +19,7 @@ export const TopBar = () => {
   const [error, setError] = useState<string | null>(null);
   const now = new Date();
   const timeStr = (systemStatus?.currentTime || now.toISOString()).replace('T', ' ').substring(0, 19);
-  const tushare = dataSources.find((source) => source.name === 'Tushare') || dataSources[0];
+  const akshare = dataSources.find((source) => source.name === 'AkShare') || dataSources[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -57,11 +57,11 @@ export const TopBar = () => {
                 <div className="flex items-center gap-1.5 cursor-help">
                   <Database className="w-3.5 h-3.5 text-gray-400" />
                   <span className="text-[10px] font-medium text-gray-500">
-                    {tushare ? `${tushare.name}: ${tushare.latency}` : '数据源: 加载中'}
+                    {akshare ? `${akshare.name}: ${akshare.latency}` : '数据源: 加载中'}
                   </span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{error || (tushare ? `数据源状态：${tushare.status}` : '正在读取数据源状态')}</TooltipContent>
+              <TooltipContent>{error || (akshare ? `数据源状态：${akshare.status}` : '正在读取数据源状态')}</TooltipContent>
             </Tooltip>
           </div>
         </TooltipProvider>

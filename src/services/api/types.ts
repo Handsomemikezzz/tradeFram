@@ -189,12 +189,12 @@ export interface ResearchReportResponse {
     netMargin: number;
     roe: number;
     pe: number;
-  };
+  } | null;
   report: {
     overview: string;
     keyInsights: string[];
     worthFurtherResearch: boolean;
-    aiConfidence: number;
+    aiConfidence: number | null;
     dataCompleteness: number;
     aiDisclaimer: string;
     risks: Array<{ title: string; description: string; severity: string }>;

@@ -175,7 +175,7 @@ class MonitoringItem(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     code: Mapped[str] = mapped_column(String(6), ForeignKey("stock.code"), nullable=False, index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    strategy_id: Mapped[str] = mapped_column(String(64), nullable=False, default="strategy_mock_breakout")
+    strategy_id: Mapped[str] = mapped_column(String(64), nullable=False, default="strategy_ma_breakout")
     strategy_name: Mapped[str] = mapped_column(String(64), nullable=False, default="突破策略")
     strategy_params: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     risk_params: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)

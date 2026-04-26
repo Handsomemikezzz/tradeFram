@@ -21,15 +21,20 @@ DEFAULT_CODES = ["600519", "000858", "300750", "601318"]
 
 
 def main() -> int:
-    provider_name = sys.argv[1] if len(sys.argv) > 1 else os.getenv("MARKET_DATA_PROVIDER", "akshare")
-    codes = sys.argv[2:] or DEFAULT_CODES
+    args = sys.argv[1:]
+    if args and args[0].lower() == "mock":
+        print("mock provider has been removed; this smoke test is AkShare-only.", file=sys.stderr)
+        return 2
+    if args and args[0].lower() == "akshare":
+        args = args[1:]
+    codes = args or DEFAULT_CODES
     init_db()
     results = []
     with SessionLocal() as db:
-        provider = get_provider(provider_name)
+        provider = get_provider("akshare")
         for code in codes:
             try:
-                dataset = refresh_stock_data(db, code, provider.name)
+                dataset = refresh_stock_data(db, code, "akshare")
                 db.commit()
                 stock = dataset["stock"]
                 bars = dataset["bars"]

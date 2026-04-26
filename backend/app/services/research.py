@@ -21,7 +21,7 @@ def create_research_task(db: Session, payload: ResearchTaskCreate) -> m.Research
     report_id = new_id("rr")
     provider_name = payload.options.get("provider") if payload.options else None
     try:
-        market_dataset = fetch_market_dataset(db, payload.code, provider=None if provider_name is None else get_provider(provider_name))
+        market_dataset = fetch_market_dataset(db, payload.code, provider=get_provider(provider_name))
     except DataFetchError as exc:
         task = m.ResearchTask(
             id=task_id,
@@ -48,13 +48,14 @@ def create_research_task(db: Session, payload: ResearchTaskCreate) -> m.Research
 
     stock = market_dataset["stock"]
     bars = market_dataset["bars"]
+    financial = market_dataset.get("financial")
     latest_close = bars[-1].close if bars else stock.price
     ma5 = sum(bar.close for bar in bars[-5:]) / min(len(bars), 5)
     ma20 = sum(bar.close for bar in bars[-20:]) / min(len(bars), 20)
 
     risks = [
-        {"title": "数据源限制", "description": "v0.1 Beta+ 仅按单只股票拉取基础数据；默认使用可复现 MockProvider，AkShare 为可选真实数据源。", "severity": "MEDIUM"},
-        {"title": "模型限制", "description": "当前为模板化 mock AI 报告，不能作为投资建议。", "severity": "HIGH"},
+        {"title": "数据源限制", "description": "当前仅通过 AkShare 按单只股票拉取公开行情与财务摘要；上游不可用时任务会显式失败或沿用已标记的过期缓存。", "severity": "MEDIUM"},
+        {"title": "研究限制", "description": "当前未接入真实 AI 推理与人工投研校验，报告仅整理 AkShare 已返回的数据，不构成投资建议。", "severity": "HIGH"},
     ]
     if market_dataset.get("dataStale"):
         risks.insert(
@@ -70,27 +71,16 @@ def create_research_task(db: Session, payload: ResearchTaskCreate) -> m.Research
         task_id=task_id,
         code=stock.code,
         status="COMPLETED",
-        overview=f"{stock.name}作为{stock.industry}板块的重要标的，v0.1 Beta 已接入统一行情数据层。本报告基于最近 {len(bars)} 条日线数据、基础财务摘要和模板化 mock AI 生成，仅用于研究学习和模拟交易，不构成投资建议。",
-        key_insights=[
-            f"行业属性：{stock.industry}，数据源：{' / '.join(market_dataset['dataSources'])}。",
-            f"最新收盘价：{latest_close:.2f}，MA5={ma5:.2f}，MA20={ma20:.2f}。",
-            f"估值指标：PE {stock.pe}x，ROE {stock.roe}%。",
-            "AI 仅生成研究报告，不直接决定交易，也不会直接创建订单。",
-        ],
+        overview=f"{stock.name}（{stock.symbol}）属于{stock.industry}行业。本报告基于 AkShare 返回的最近 {len(bars)} 条日线行情与可用财务摘要整理生成。",
+        key_insights=_build_key_insights(stock, market_dataset, latest_close, ma5, ma20),
         risks=risks,
-        business_segments=[
-            {"name": stock.industry, "percent": 80.0},
-            {"name": "相关业务", "percent": 15.0},
-            {"name": "其他业务", "percent": 5.0},
-        ],
-        news_items=[
-            {"id": new_id("news"), "title": f"{stock.name} mock 研究资讯", "date": "2026-04-25", "type": "NEWS", "url": None},
-            {"id": new_id("ann"), "title": f"{stock.name} mock 公告摘要", "date": "2026-04-24", "type": "ANNOUNCEMENT", "url": None},
-        ],
+        business_segments=[],
+        news_items=[],
         worth_further_research=True,
-        ai_confidence=0.92,
+        ai_confidence=0.0,
         data_completeness=market_dataset["dataCompleteness"],
-        ai_disclaimer="本报告由 v0.1 Beta 模板化 mock AI 生成；AI 只生成研究报告，不直接下单，不构成投资建议。",
+        ai_disclaimer="本报告仅整理 AkShare 返回的公开数据；当前未接入真实 AI 推理、真实券商或人工投研校验，不构成投资建议。",
+        research_base_period=financial.report_period if financial else "UNKNOWN",
         data_sources=market_dataset["dataSources"],
     )
     task = m.ResearchTask(
@@ -110,10 +100,25 @@ def create_research_task(db: Session, payload: ResearchTaskCreate) -> m.Research
             module="AI",
             code=stock.code,
             event="报告生成",
-            detail=f"{stock.name} mock 研究报告生成完毕",
+            detail=f"{stock.name} AkShare 数据研究报告生成完毕",
             rel_id=report_id,
         )
     )
     db.commit()
     db.refresh(task)
     return task
+
+
+def _build_key_insights(stock: m.Stock, market_dataset: dict, latest_close: float, ma5: float, ma20: float) -> list[str]:
+    insights = [
+        f"行业属性：{stock.industry}；数据源：{' / '.join(market_dataset['dataSources'])}。",
+        f"最新收盘价：{latest_close:.2f}；MA5={ma5:.2f}，MA20={ma20:.2f}。",
+    ]
+    financial = market_dataset.get("financial")
+    if financial is not None:
+        insights.append(f"财务摘要：ROE {stock.roe}%，营业收入 {stock.revenue}，归母净利润 {stock.profit}。")
+    else:
+        insights.append("AkShare 当前未返回可用财务摘要。")
+    if market_dataset.get("dataStale"):
+        insights.append(f"当前使用过期缓存；最近刷新错误：{market_dataset.get('refreshError') or '未知'}。")
+    return insights
