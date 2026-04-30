@@ -22,11 +22,16 @@ class ParquetStore:
             else:
                 path.unlink()
         path.mkdir(parents=True, exist_ok=True)
-        frame.to_parquet(path, index=False, partition_cols=partition_cols)
+        if partition_cols:
+            frame.to_parquet(path, index=False, partition_cols=partition_cols)
+        else:
+            frame.to_parquet(path / "part.parquet", index=False)
 
     def read_dataset(self, path: Path) -> pd.DataFrame:
         frame = pd.read_parquet(path)
         for column in ["code", "symbol", "exchange", "index_code", "price_adjustment"]:
             if column in frame.columns:
                 frame[column] = frame[column].astype("string").astype(str)
+        if "code" in frame.columns:
+            frame["code"] = frame["code"].str.zfill(6)
         return frame
