@@ -106,6 +106,7 @@ class PriceBar(Base):
     volume: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     source: Mapped[str] = mapped_column(String(64), nullable=False)
+    price_adjustment: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
     fetched_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
 
     stock: Mapped[Stock] = relationship()
@@ -185,6 +186,42 @@ class MonitoringItem(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
 
     stock: Mapped[Stock] = relationship()
+
+
+class LimitUpBreakSnapshot(Base):
+    __tablename__ = "limit_up_break_snapshot"
+    __table_args__ = (UniqueConstraint("trade_date", "threshold", "data_source", name="uq_limit_up_break_snapshot_date_threshold_source"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    previous_trade_date: Mapped[date | None] = mapped_column(Date)
+    threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    data_source: Mapped[str] = mapped_column(String(64), nullable=False, default="AkShare")
+    price_adjustment: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    candidate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    break_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    suspended_break_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+
+class LimitUpBreakItem(Base):
+    __tablename__ = "limit_up_break_item"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(String(64), ForeignKey("limit_up_break_snapshot.id"), nullable=False, index=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(6), ForeignKey("stock.code"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_limit_up_height: Mapped[int] = mapped_column(Integer, nullable=False)
+    change_percent: Mapped[float | None] = mapped_column(Float)
+    amount: Mapped[float | None] = mapped_column(Float)
+    intraday_break: Mapped[bool | None] = mapped_column(Boolean)
+    break_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    stock: Mapped[Stock] = relationship()
+    snapshot: Mapped[LimitUpBreakSnapshot] = relationship()
 
 
 class PaperTradingEngineState(Base):

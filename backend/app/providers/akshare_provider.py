@@ -50,7 +50,7 @@ class AkShareMarketDataProvider(MarketDataProvider):
                 period="daily",
                 start_date=start_date.strftime("%Y%m%d"),
                 end_date=end_date.strftime("%Y%m%d"),
-                adjust="qfq",
+                adjust="",
             )
         except Exception as exc:  # pragma: no cover - external network/interface
             bar_error = exc
@@ -64,10 +64,10 @@ class AkShareMarketDataProvider(MarketDataProvider):
     def _fallback_daily_bars_frame(self, ak, code: str, start_date: date, end_date: date, original_error: Exception | None):
         symbol = f"{_exchange_for(code).lower()}{code}"
         try:
-            return ak.stock_zh_a_daily(symbol=symbol, start_date=start_date.strftime("%Y%m%d"), end_date=end_date.strftime("%Y%m%d"), adjust="qfq")
+            return ak.stock_zh_a_daily(symbol=symbol, start_date=start_date.strftime("%Y%m%d"), end_date=end_date.strftime("%Y%m%d"), adjust="")
         except Exception as sina_error:  # pragma: no cover - external network/interface
             try:
-                return ak.stock_zh_a_hist_tx(symbol=symbol, start_date=start_date.strftime("%Y%m%d"), end_date=end_date.strftime("%Y%m%d"), adjust="qfq")
+                return ak.stock_zh_a_hist_tx(symbol=symbol, start_date=start_date.strftime("%Y%m%d"), end_date=end_date.strftime("%Y%m%d"), adjust="")
             except Exception as tx_error:
                 if original_error is not None:
                     raise RuntimeError(f"{original_error}; fallback daily sources failed: sina={sina_error}; tx={tx_error}") from original_error

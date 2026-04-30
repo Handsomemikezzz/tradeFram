@@ -363,6 +363,7 @@ def _replace_price_bars(db: Session, code: str, source: str, bars: list[Provider
                 volume=bar.volume,
                 amount=bar.amount,
                 source=source,
+                price_adjustment="none",
             )
         )
     db.flush()

@@ -288,6 +288,32 @@ export interface MonitoringItemResponse {
   latestOrder: OrderResponse | null;
 }
 
+export interface LimitUpBreakItemResponse {
+  id: string;
+  code: string;
+  name: string;
+  previousLimitUpHeight: number;
+  changePercent: number | null;
+  amount: number | null;
+  intradayBreak: boolean | null;
+  breakType: 'CLOSE_NOT_LIMIT_UP' | 'SUSPENDED' | string;
+}
+
+export interface LimitUpBreakSnapshotResponse {
+  id: string;
+  tradeDate: string;
+  previousTradeDate: string | null;
+  threshold: number;
+  provider: string;
+  priceAdjustment: string;
+  candidateCount: number;
+  breakCount: number;
+  suspendedBreakCount: number;
+  generatedAt: string;
+  updatedAt: string;
+  items: LimitUpBreakItemResponse[];
+}
+
 export interface EngineResponse {
   active: boolean;
   mode: 'PAPER_TRADING_ONLY';

@@ -186,6 +186,46 @@ def monitoring_payload(item: m.MonitoringItem, latest_signal=None, latest_risk=N
     }
 
 
+def limit_up_break_snapshot_payload(snapshot: m.LimitUpBreakSnapshot, items: list[m.LimitUpBreakItem] | None = None) -> dict:
+    if items is None:
+        session = object_session(snapshot)
+        items = []
+        if session is not None:
+            items = (
+                session.query(m.LimitUpBreakItem)
+                .filter(m.LimitUpBreakItem.snapshot_id == snapshot.id)
+                .order_by(m.LimitUpBreakItem.previous_limit_up_height.desc(), m.LimitUpBreakItem.code.asc())
+                .all()
+            )
+    return {
+        "id": snapshot.id,
+        "tradeDate": snapshot.trade_date.isoformat(),
+        "previousTradeDate": snapshot.previous_trade_date.isoformat() if snapshot.previous_trade_date else None,
+        "threshold": snapshot.threshold,
+        "provider": snapshot.data_source,
+        "priceAdjustment": snapshot.price_adjustment,
+        "candidateCount": snapshot.candidate_count,
+        "breakCount": snapshot.break_count,
+        "suspendedBreakCount": snapshot.suspended_break_count,
+        "generatedAt": dt_iso(snapshot.generated_at),
+        "updatedAt": dt_iso(snapshot.updated_at),
+        "items": [limit_up_break_item_payload(item) for item in items],
+    }
+
+
+def limit_up_break_item_payload(item: m.LimitUpBreakItem) -> dict:
+    return {
+        "id": item.id,
+        "code": item.code,
+        "name": item.name,
+        "previousLimitUpHeight": item.previous_limit_up_height,
+        "changePercent": item.change_percent,
+        "amount": item.amount,
+        "intradayBreak": item.intraday_break,
+        "breakType": item.break_type,
+    }
+
+
 def signal_payload(signal: m.Signal) -> dict:
     return {
         "id": signal.id,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -74,6 +75,12 @@ class PaperTradingRunCreate(BaseModel):
     trigger: Literal["MANUAL", "AUTO"] = "MANUAL"
     scope: PaperTradingRunScope = Field(default_factory=PaperTradingRunScope)
     dryRun: bool = False
+
+
+class LimitUpBreakSnapshotCreate(BaseModel):
+    tradeDate: date | None = None
+    threshold: int = Field(default=2, ge=1)
+    provider: str = "AkShare"
 
 
 class Page(BaseModel):

@@ -8,3 +8,4 @@ export * from './tradingApi';
 export * from './portfolioApi';
 export * from './auditApi';
 export * from './dataApi';
+export * from './limitUpBreakApi';

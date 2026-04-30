@@ -8,6 +8,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   Search,
+  TrendingDown,
   MonitorPlay,
   History,
   Settings,
@@ -18,6 +19,7 @@ import { dataSourceStatusLabel, DataSourceHealthItem, systemApi, SystemStatusRes
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: '首页概览', path: '/' },
   { icon: Search, label: '股票研究', path: '/research' },
+  { icon: TrendingDown, label: '连板断板', path: '/limit-up-breaks' },
   { icon: MonitorPlay, label: '交易控制台', path: '/trading' },
   { icon: History, label: '持仓与日志', path: '/history' },
 ];

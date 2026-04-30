@@ -197,6 +197,34 @@ def test_akshare_daily_bars_fall_back_to_sina_daily(monkeypatch):
     assert bars[0].close == 10.8
 
 
+def test_akshare_daily_bars_request_unadjusted_prices(monkeypatch):
+    calls = []
+
+    class RecordingAkShare:
+        def stock_zh_a_hist(self, **kwargs):
+            calls.append(kwargs)
+            return pd.DataFrame(
+                [
+                    {
+                        "日期": "2026-04-24",
+                        "开盘": 10.0,
+                        "最高": 11.0,
+                        "最低": 9.5,
+                        "收盘": 10.8,
+                        "成交量": 10000,
+                        "成交额": 108000,
+                    }
+                ]
+            )
+
+    monkeypatch.setattr("backend.app.providers.akshare_provider._akshare", lambda: RecordingAkShare())
+
+    bars = AkShareMarketDataProvider().get_daily_bars("600879", date(2026, 1, 1), date(2026, 4, 26))
+
+    assert len(bars) == 1
+    assert calls[0]["adjust"] == ""
+
+
 def test_data_source_failure_writes_data_fetch_log():
     reset_database()
     with SessionLocal() as db:

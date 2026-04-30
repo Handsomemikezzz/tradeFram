@@ -73,3 +73,6 @@ def _ensure_lightweight_schema() -> None:
             ]:
                 if column not in table_columns:
                     conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} FLOAT NOT NULL DEFAULT 0")
+        price_bar_columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(price_bar)").fetchall()}
+        if "price_adjustment" not in price_bar_columns:
+            conn.exec_driver_sql("ALTER TABLE price_bar ADD COLUMN price_adjustment VARCHAR(16) NOT NULL DEFAULT 'unknown'")
