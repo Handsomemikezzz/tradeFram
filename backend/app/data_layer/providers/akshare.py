@@ -80,15 +80,7 @@ class AkShareDataLayerProvider(DataLayerProvider):
 
     def get_index_daily_bars(self, index_code: str, start_date: date, end_date: date) -> list[DataLayerIndexDailyBar]:
         ak = _akshare()
-        symbol = index_code.split(".")[0]
-        frame = ak.index_zh_a_hist(
-            symbol=symbol,
-            period="daily",
-            start_date=start_date.strftime("%Y%m%d"),
-            end_date=end_date.strftime("%Y%m%d"),
-        )
-        if frame is None or frame.empty:
-            return []
+        frame = self._index_daily_frame(ak, index_code, start_date, end_date)
         name = CORE_INDEXES.get(index_code, index_code)
         return [
             DataLayerIndexDailyBar(
@@ -105,6 +97,44 @@ class AkShareDataLayerProvider(DataLayerProvider):
             )
             for _, row in frame.iterrows()
         ]
+
+    def _index_daily_frame(self, ak, index_code: str, start_date: date, end_date: date):
+        em_symbol = _prefixed_index_symbol(index_code)
+        compact_symbol = index_code.split(".")[0]
+        start_text = start_date.strftime("%Y%m%d")
+        end_text = end_date.strftime("%Y%m%d")
+
+        errors: list[str] = []
+        try:
+            frame = ak.stock_zh_index_daily_em(symbol=em_symbol, start_date=start_text, end_date=end_text)
+            if frame is not None and not frame.empty:
+                return frame
+        except Exception as exc:
+            errors.append(f"stock_zh_index_daily_em={exc}")
+
+        try:
+            frame = ak.index_zh_a_hist(symbol=compact_symbol, period="daily", start_date=start_text, end_date=end_text)
+            if frame is not None and not frame.empty:
+                return frame
+        except Exception as exc:
+            errors.append(f"index_zh_a_hist={exc}")
+
+        try:
+            frame = ak.stock_zh_index_daily(symbol=em_symbol)
+            if frame is not None and not frame.empty:
+                filtered = []
+                for _, row in frame.iterrows():
+                    trade_date = _to_date(_pick(row, ["日期", "date", "trade_date"]))
+                    if start_date <= trade_date <= end_date:
+                        filtered.append(row)
+                if filtered:
+                    return type(frame)(filtered)
+        except Exception as exc:
+            errors.append(f"stock_zh_index_daily={exc}")
+
+        if errors:
+            raise RuntimeError("; ".join(errors))
+        return []
 
 
 def _akshare():
@@ -141,6 +171,12 @@ def _exchange_for(code: str) -> str:
 
 def _market_for(exchange: str) -> str:
     return {"SH": "上证A股", "SZ": "深证A股", "BJ": "北京A股"}.get(exchange, "A股")
+
+
+def _prefixed_index_symbol(index_code: str) -> str:
+    code, _, exchange = index_code.partition(".")
+    prefix = "sz" if exchange.upper() == "SZ" or code.startswith("399") else "sh"
+    return f"{prefix}{code}"
 
 
 def _pick(row, keys: list[str], default: Any = None) -> Any:

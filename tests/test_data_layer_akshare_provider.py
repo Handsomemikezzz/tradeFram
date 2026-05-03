@@ -8,6 +8,9 @@ from backend.app.data_layer.providers.akshare import AkShareDataLayerProvider
 
 
 class FakeAkShare:
+    def __init__(self):
+        self.index_em_symbols: list[str] = []
+
     def stock_info_a_code_name(self):
         return pd.DataFrame(
             [
@@ -47,6 +50,36 @@ class FakeAkShare:
             ]
         )
 
+    def stock_zh_index_daily_em(self, **kwargs):
+        self.index_em_symbols.append(kwargs["symbol"])
+        return pd.DataFrame(
+            [
+                {
+                    "date": "2026-04-30",
+                    "open": 3000,
+                    "high": 3010,
+                    "low": 2990,
+                    "close": 3005,
+                    "volume": 100,
+                    "amount": 100000,
+                }
+            ]
+        )
+
+    def stock_zh_index_daily(self, **kwargs):
+        return pd.DataFrame(
+            [
+                {
+                    "date": date(2026, 4, 30),
+                    "open": 3000,
+                    "high": 3010,
+                    "low": 2990,
+                    "close": 3005,
+                    "volume": 100,
+                }
+            ]
+        )
+
     def tool_trade_date_hist_sina(self):
         return pd.DataFrame([{"trade_date": "2026-04-29"}, {"trade_date": "2026-04-30"}])
 
@@ -74,7 +107,8 @@ def test_akshare_data_layer_provider_converts_daily_bars(monkeypatch):
 
 
 def test_akshare_data_layer_provider_converts_calendar_and_index_bars(monkeypatch):
-    monkeypatch.setattr("backend.app.data_layer.providers.akshare._akshare", lambda: FakeAkShare())
+    fake = FakeAkShare()
+    monkeypatch.setattr("backend.app.data_layer.providers.akshare._akshare", lambda: fake)
     provider = AkShareDataLayerProvider()
 
     calendar = provider.get_trading_calendar(date(2026, 4, 30), date(2026, 4, 30))
@@ -84,3 +118,45 @@ def test_akshare_data_layer_provider_converts_calendar_and_index_bars(monkeypatc
     assert calendar[0].exchange == "CN_A"
     assert index_bars[0].index_code == "000001.SH"
     assert index_bars[0].name == "上证指数"
+    assert fake.index_em_symbols == ["sh000001"]
+
+
+def test_akshare_index_daily_bars_use_sz_prefix_for_sz_indexes(monkeypatch):
+    fake = FakeAkShare()
+    monkeypatch.setattr("backend.app.data_layer.providers.akshare._akshare", lambda: fake)
+
+    bars = AkShareDataLayerProvider().get_index_daily_bars("399001.SZ", date(2026, 4, 1), date(2026, 4, 30))
+
+    assert bars[0].index_code == "399001.SZ"
+    assert fake.index_em_symbols == ["sz399001"]
+
+
+def test_akshare_index_daily_bars_fallback_to_index_hist(monkeypatch):
+    class EmFailAkShare(FakeAkShare):
+        def stock_zh_index_daily_em(self, **kwargs):
+            raise RuntimeError("em unavailable")
+
+    monkeypatch.setattr("backend.app.data_layer.providers.akshare._akshare", lambda: EmFailAkShare())
+
+    bars = AkShareDataLayerProvider().get_index_daily_bars("000300.SH", date(2026, 4, 1), date(2026, 4, 30))
+
+    assert len(bars) == 1
+    assert bars[0].index_code == "000300.SH"
+    assert bars[0].amount == 100000
+
+
+def test_akshare_index_daily_bars_fallback_to_legacy_daily_without_amount(monkeypatch):
+    class EmAndHistFailAkShare(FakeAkShare):
+        def stock_zh_index_daily_em(self, **kwargs):
+            raise RuntimeError("em unavailable")
+
+        def index_zh_a_hist(self, **kwargs):
+            raise RuntimeError("hist unavailable")
+
+    monkeypatch.setattr("backend.app.data_layer.providers.akshare._akshare", lambda: EmAndHistFailAkShare())
+
+    bars = AkShareDataLayerProvider().get_index_daily_bars("000905.SH", date(2026, 4, 1), date(2026, 4, 30))
+
+    assert len(bars) == 1
+    assert bars[0].index_code == "000905.SH"
+    assert bars[0].amount == 0
