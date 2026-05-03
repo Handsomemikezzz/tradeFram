@@ -50,6 +50,7 @@ Thumbs.db
 # Python backend local artifacts
 .venv/
 paper_trading.db
+data/
 *.db-journal
 __pycache__/
 .pytest_cache/
