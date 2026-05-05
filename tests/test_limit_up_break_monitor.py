@@ -233,6 +233,30 @@ def test_snapshot_can_be_queried_by_date():
     assert len(snapshot["items"]) == 2
 
 
+def test_snapshot_query_falls_back_to_latest_available_trade_date():
+    reset_database()
+    seed_two_board_candidate_then_break()
+    client = TestClient(app)
+    assert_ok(client.post("/api/v1/limit-up-breaks/snapshots", json={"tradeDate": "2026-04-30", "provider": "akshare"}))
+
+    snapshot = assert_ok(client.get("/api/v1/limit-up-breaks/snapshots/2026-05-05?threshold=2&provider=AkShare"))
+
+    assert snapshot["tradeDate"] == "2026-04-30"
+    assert snapshot["breakCount"] == 2
+    assert [item["code"] for item in snapshot["items"]] == ["600001", "600003"]
+
+
+def test_snapshot_generation_falls_back_to_latest_available_trade_date():
+    reset_database()
+    seed_two_board_candidate_then_break()
+    client = TestClient(app)
+
+    snapshot = assert_ok(client.post("/api/v1/limit-up-breaks/snapshots", json={"tradeDate": "2026-05-05", "provider": "AkShare"}))
+
+    assert snapshot["tradeDate"] == "2026-04-30"
+    assert snapshot["breakCount"] == 2
+
+
 def test_adjusted_price_bars_are_not_used_for_break_snapshots():
     reset_database()
     add_stock("600001", "前复权缓存")
@@ -244,4 +268,4 @@ def test_adjusted_price_bars_are_not_used_for_break_snapshots():
     body = response.json()
 
     assert response.status_code == 422
-    assert body["error"]["code"] == "TRADE_DATE_NOT_READY"
+    assert body["error"]["code"] == "NO_PRICE_DATA"

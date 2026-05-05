@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import models as m
@@ -27,13 +28,11 @@ def generate_limit_up_break_snapshot(db: Session, trade_date: date | None = None
     if threshold < 1:
         raise LimitUpBreakError("INVALID_THRESHOLD", "连板起步门槛必须大于等于 1")
     provider = provider or "AkShare"
-    target_date = trade_date or _latest_trade_date(db, provider)
+    target_date = _resolve_snapshot_trade_date(trade_date, provider)
     if target_date is None:
         raise LimitUpBreakError("NO_PRICE_DATA", "无可用于断板监控的未复权日 K 数据", status_code=422)
 
     trade_dates = _known_trade_dates(db, provider, target_date)
-    if target_date not in trade_dates:
-        raise LimitUpBreakError("TRADE_DATE_NOT_READY", f"{target_date.isoformat()} 无行情数据，无法生成断板快照", status_code=422)
     previous_trade_date = _previous_trade_date(trade_dates, target_date)
     if previous_trade_date is None:
         raise LimitUpBreakError("INSUFFICIENT_HISTORY", f"{target_date.isoformat()} 缺少上一交易日行情", status_code=422)
@@ -70,12 +69,15 @@ def generate_limit_up_break_snapshot(db: Session, trade_date: date | None = None
 
 
 def get_limit_up_break_snapshot(db: Session, trade_date: date, *, threshold: int = 2, provider: str = "AkShare") -> m.LimitUpBreakSnapshot | None:
+    target_date = _resolve_snapshot_trade_date(trade_date, provider)
+    if target_date is None:
+        return None
     return (
         db.query(m.LimitUpBreakSnapshot)
         .filter(
-            m.LimitUpBreakSnapshot.trade_date == trade_date,
+            m.LimitUpBreakSnapshot.trade_date == target_date,
             m.LimitUpBreakSnapshot.threshold == threshold,
-            m.LimitUpBreakSnapshot.data_source == provider,
+            func.lower(m.LimitUpBreakSnapshot.data_source) == provider.lower(),
         )
         .first()
     )
@@ -146,6 +148,14 @@ def _known_trade_dates(db: Session, provider: str, end_date: date) -> list[date]
 
 def _latest_trade_date(db: Session, provider: str) -> date | None:
     return WarehouseMarketDataStore().latest_trade_date()
+
+
+def _resolve_snapshot_trade_date(requested: date | None, provider: str) -> date | None:
+    store = WarehouseMarketDataStore()
+    if requested is None:
+        return store.latest_trade_date()
+    dates = store.trade_dates(end_date=requested)
+    return dates[-1] if dates else None
 
 
 def _previous_trade_date(trade_dates: list[date], target_date: date) -> date | None:

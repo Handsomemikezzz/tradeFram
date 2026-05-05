@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { formatDateTime, limitUpBreakApi, LimitUpBreakItemResponse, LimitUpBreakSnapshotResponse } from '@/services/api';
+import { ApiClientError, formatDateTime, limitUpBreakApi, LimitUpBreakItemResponse, LimitUpBreakSnapshotResponse } from '@/services/api';
 
 const DEFAULT_PROVIDER = 'AkShare';
 
@@ -54,8 +54,15 @@ export default function LimitUpBreakMonitor() {
     if (!tradeDate) return;
     setLoading(true);
     try {
-      const data = await limitUpBreakApi.getSnapshot(tradeDate, { threshold, provider: DEFAULT_PROVIDER });
+      let data: LimitUpBreakSnapshotResponse;
+      try {
+        data = await limitUpBreakApi.getSnapshot(tradeDate, { threshold, provider: DEFAULT_PROVIDER });
+      } catch (err) {
+        if (!(err instanceof ApiClientError) || err.code !== 'LIMIT_UP_BREAK_SNAPSHOT_NOT_FOUND') throw err;
+        data = await limitUpBreakApi.createSnapshot({ tradeDate, threshold, provider: DEFAULT_PROVIDER });
+      }
       setSnapshot(data);
+      if (data.tradeDate !== tradeDate) setTradeDate(data.tradeDate);
       setError(null);
     } catch (err) {
       setSnapshot(null);
@@ -75,6 +82,7 @@ export default function LimitUpBreakMonitor() {
     try {
       const data = await limitUpBreakApi.createSnapshot({ tradeDate, threshold, provider: DEFAULT_PROVIDER });
       setSnapshot(data);
+      if (data.tradeDate !== tradeDate) setTradeDate(data.tradeDate);
       setError(null);
       toast.success('断板快照已更新', {
         description: `${data.tradeDate} 候选 ${data.candidateCount} 只，断板 ${data.breakCount} 只`,
