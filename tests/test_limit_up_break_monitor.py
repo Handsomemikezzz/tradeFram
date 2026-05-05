@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
+import os
+from pathlib import Path
+import tempfile
 
 from fastapi.testclient import TestClient
+import pandas as pd
 
 from backend.app import models as m
+from backend.app.data_layer.storage.parquet_store import ParquetStore
 from backend.app.database import Base, SessionLocal, engine
 from backend.app.main import app
 from backend.app.seed import seed_database
@@ -15,6 +20,7 @@ def reset_database() -> None:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     seed_database()
+    os.environ["DATA_ROOT"] = tempfile.mkdtemp(prefix="waytofree-test-data-")
 
 
 def assert_ok(response):
@@ -40,24 +46,42 @@ def add_stock(code: str, name: str, *, market: str = "上证主板", exchange: s
 
 
 def add_bar(code: str, trade_date: date, close: float, *, amount: float = 10000, source: str = "AkShare", adjustment: str = "none") -> None:
-    with SessionLocal() as db:
-        db.query(m.PriceBar).filter(m.PriceBar.code == code, m.PriceBar.trade_date == trade_date, m.PriceBar.source == source).delete()
-        db.add(
-            m.PriceBar(
-                id=f"bar_{code}_{trade_date.isoformat()}",
-                code=code,
-                trade_date=trade_date,
-                open=close,
-                high=close,
-                low=close,
-                close=close,
-                volume=1000,
-                amount=amount,
-                source=source,
-                price_adjustment=adjustment,
-            )
+    store = ParquetStore()
+    path = Path(os.environ["DATA_ROOT"]) / "warehouse" / "daily_bars"
+    rows = []
+    if os.path.exists(path):
+        rows = store.read_dataset(path).to_dict(orient="records")
+    rows = [
+        row
+        for row in rows
+        if not (
+            str(row["code"]).zfill(6) == code
+            and row["trade_date"] == trade_date
+            and str(row.get("price_adjustment", "raw")) == _adjustment_name(adjustment)
         )
-        db.commit()
+    ]
+    rows.append(
+        {
+            "code": code,
+            "symbol": f"{code}.SH" if code.startswith("6") else f"{code}.SZ",
+            "exchange": "SH" if code.startswith("6") else "SZ",
+            "trade_date": trade_date,
+            "open": close,
+            "high": close,
+            "low": close,
+            "close": close,
+            "volume": 1000,
+            "amount": amount,
+            "price_adjustment": _adjustment_name(adjustment),
+            "source_provider": source,
+            "source_updated_at": datetime(2026, 5, 5, tzinfo=UTC),
+        }
+    )
+    store.write_dataset(path, pd.DataFrame(rows), partition_cols=["code"], overwrite=True)
+
+
+def _adjustment_name(adjustment: str) -> str:
+    return "raw" if adjustment in {"none", "raw"} else adjustment
 
 
 def seed_two_board_candidate_then_break() -> None:

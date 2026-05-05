@@ -10,6 +10,7 @@ from backend.app.data_layer.providers.akshare import AkShareDataLayerProvider
 class FakeAkShare:
     def __init__(self):
         self.index_em_symbols: list[str] = []
+        self.stock_adjustments: list[str] = []
 
     def stock_info_a_code_name(self):
         return pd.DataFrame(
@@ -20,7 +21,7 @@ class FakeAkShare:
         )
 
     def stock_zh_a_hist(self, **kwargs):
-        assert kwargs["adjust"] == ""
+        self.stock_adjustments.append(kwargs["adjust"])
         return pd.DataFrame(
             [
                 {
@@ -96,14 +97,21 @@ def test_akshare_data_layer_provider_converts_instruments(monkeypatch):
 
 
 def test_akshare_data_layer_provider_converts_daily_bars(monkeypatch):
-    monkeypatch.setattr("backend.app.data_layer.providers.akshare._akshare", lambda: FakeAkShare())
+    fake = FakeAkShare()
+    monkeypatch.setattr("backend.app.data_layer.providers.akshare._akshare", lambda: fake)
 
-    bars = AkShareDataLayerProvider().get_daily_bars("600519", date(2026, 4, 1), date(2026, 4, 30))
+    provider = AkShareDataLayerProvider()
+    raw_bars = provider.get_daily_bars("600519", date(2026, 4, 1), date(2026, 4, 30), price_adjustment="raw")
+    qfq_bars = provider.get_daily_bars("600519", date(2026, 4, 1), date(2026, 4, 30), price_adjustment="qfq")
+    hfq_bars = provider.get_daily_bars("600519", date(2026, 4, 1), date(2026, 4, 30), price_adjustment="hfq")
 
-    assert len(bars) == 1
-    assert bars[0].symbol == "600519.SH"
-    assert bars[0].price_adjustment == "none"
-    assert bars[0].close == 108
+    assert len(raw_bars) == 1
+    assert raw_bars[0].symbol == "600519.SH"
+    assert raw_bars[0].price_adjustment == "raw"
+    assert raw_bars[0].close == 108
+    assert qfq_bars[0].price_adjustment == "qfq"
+    assert hfq_bars[0].price_adjustment == "hfq"
+    assert fake.stock_adjustments == ["", "qfq", "hfq"]
 
 
 def test_akshare_data_layer_provider_converts_calendar_and_index_bars(monkeypatch):

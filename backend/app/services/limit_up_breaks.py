@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
-from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .. import models as m
+from ..data_layer.warehouse.reader import WarehouseMarketDataStore, WarehousePriceBar
 from ..utils import new_id
 
 
@@ -141,19 +141,11 @@ def _is_st(stock: m.Stock) -> bool:
 
 
 def _known_trade_dates(db: Session, provider: str, end_date: date) -> list[date]:
-    rows = (
-        db.query(m.PriceBar.trade_date)
-        .filter(m.PriceBar.source == provider, m.PriceBar.price_adjustment == "none", m.PriceBar.trade_date <= end_date)
-        .distinct()
-        .order_by(m.PriceBar.trade_date.asc())
-        .all()
-    )
-    return [row[0] for row in rows]
+    return WarehouseMarketDataStore().trade_dates(end_date=end_date)
 
 
 def _latest_trade_date(db: Session, provider: str) -> date | None:
-    row = db.query(m.PriceBar).filter(m.PriceBar.source == provider, m.PriceBar.price_adjustment == "none").order_by(desc(m.PriceBar.trade_date)).first()
-    return row.trade_date if row else None
+    return WarehouseMarketDataStore().latest_trade_date()
 
 
 def _previous_trade_date(trade_dates: list[date], target_date: date) -> date | None:
@@ -183,14 +175,5 @@ def _is_limit_up(close: float, previous_close: float) -> bool:
     return Decimal(str(close)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) == Decimal(str(calculate_limit_up_price(previous_close))).quantize(Decimal("0.01"))
 
 
-def _bar_for(db: Session, code: str, trade_date: date, provider: str) -> m.PriceBar | None:
-    return (
-        db.query(m.PriceBar)
-        .filter(
-            m.PriceBar.code == code,
-            m.PriceBar.trade_date == trade_date,
-            m.PriceBar.source == provider,
-            m.PriceBar.price_adjustment == "none",
-        )
-        .first()
-    )
+def _bar_for(db: Session, code: str, trade_date: date, provider: str) -> WarehousePriceBar | None:
+    return WarehouseMarketDataStore().get_bar(code, trade_date)

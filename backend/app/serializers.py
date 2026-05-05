@@ -4,6 +4,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import object_session
 
 from . import models as m
+from .data_layer.warehouse.reader import WarehouseMarketDataStore
 from .utils import dt_iso
 
 
@@ -138,17 +139,9 @@ def _last_data_error(report: m.ResearchReport) -> str | None:
 
 
 def trend_payload(stock: m.Stock) -> list[dict]:
-    session = object_session(stock)
-    if session is not None:
-        rows = (
-            session.query(m.PriceBar)
-            .filter(m.PriceBar.code == stock.code)
-            .order_by(desc(m.PriceBar.trade_date))
-            .limit(7)
-            .all()
-        )
+    rows = WarehouseMarketDataStore().get_daily_bars(stock.code, limit=7)
     if rows:
-        return [{"date": row.trade_date.isoformat(), "price": round(row.close, 2)} for row in reversed(rows)]
+        return [{"date": row.trade_date.isoformat(), "price": round(row.close, 2)} for row in rows]
     return []
 
 

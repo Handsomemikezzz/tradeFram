@@ -48,15 +48,16 @@ class AkShareDataLayerProvider(DataLayerProvider):
                 days.append(DataLayerTradingDay(trade_date=trade_date, exchange="CN_A", is_open=True))
         return days
 
-    def get_daily_bars(self, code: str, start_date: date, end_date: date) -> list[DataLayerDailyBar]:
+    def get_daily_bars(self, code: str, start_date: date, end_date: date, *, price_adjustment: str = "raw") -> list[DataLayerDailyBar]:
         ak = _akshare()
         normalized = str(code).zfill(6)
+        adjustment = _normalize_price_adjustment(price_adjustment)
         frame = ak.stock_zh_a_hist(
             symbol=normalized,
             period="daily",
             start_date=start_date.strftime("%Y%m%d"),
             end_date=end_date.strftime("%Y%m%d"),
-            adjust="",
+            adjust="" if adjustment == "raw" else adjustment,
         )
         if frame is None or frame.empty:
             return []
@@ -73,7 +74,7 @@ class AkShareDataLayerProvider(DataLayerProvider):
                 close=_to_float(_pick(row, ["收盘", "close"])),
                 volume=int(_to_float(_pick(row, ["成交量", "volume"], 0))),
                 amount=_to_float(_pick(row, ["成交额", "amount"], 0)),
-                price_adjustment="none",
+                price_adjustment=adjustment,
             )
             for _, row in frame.iterrows()
         ]
@@ -157,6 +158,15 @@ def _configure_akshare_proxy_bypass() -> None:
             if host not in values:
                 values.append(host)
         os.environ[key] = ",".join(values)
+
+
+def _normalize_price_adjustment(price_adjustment: str) -> str:
+    normalized = price_adjustment.strip().lower()
+    if normalized in {"", "none", "raw"}:
+        return "raw"
+    if normalized in {"qfq", "hfq"}:
+        return normalized
+    raise ValueError(f"unsupported price adjustment: {price_adjustment}")
 
 
 def _exchange_for(code: str) -> str:

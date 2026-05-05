@@ -7,6 +7,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .. import models as m
+from ..data_layer.warehouse.reader import WarehouseMarketDataStore, WarehousePriceBar
 from ..schemas import PaperTradingRunCreate
 from ..utils import api_error, new_id
 from .data_service import get_recent_price_bars
@@ -469,11 +470,11 @@ def _get_position(db: Session, account_id: str, code: str) -> m.Position | None:
     return db.get(m.Position, f"pos_{account_id}_{code}")
 
 
-def _latest_price_bar(db: Session, code: str) -> m.PriceBar | None:
-    return db.query(m.PriceBar).filter(m.PriceBar.code == code).order_by(desc(m.PriceBar.trade_date)).first()
+def _latest_price_bar(db: Session, code: str) -> WarehousePriceBar | None:
+    return WarehouseMarketDataStore().latest_bar(code)
 
 
-def _is_data_stale(bar: m.PriceBar, risk_params: dict) -> bool:
+def _is_data_stale(bar: WarehousePriceBar, risk_params: dict) -> bool:
     fetched_at = bar.fetched_at if bar.fetched_at.tzinfo else bar.fetched_at.replace(tzinfo=UTC)
     return datetime.now(UTC) - fetched_at > timedelta(minutes=int(risk_params["maxDataStaleMinutes"]))
 

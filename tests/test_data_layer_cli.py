@@ -10,7 +10,7 @@ def test_init_history_data_cli_help_lists_sync_flags():
     assert result.returncode == 0
     assert "--start-date" in result.stdout
     assert "--data-root" in result.stdout
-    assert "--update-business-cache" in result.stdout
+    assert "--update-business-cache" not in result.stdout
 
 
 def test_sync_daily_data_cli_help_lists_sync_flags():
@@ -27,4 +27,4 @@ def test_sync_today_if_trading_day_cli_help_lists_daily_scheduler_flags():
 
     assert result.returncode == 0
     assert "--lookback-days" in result.stdout
-    assert "--update-business-cache" in result.stdout
+    assert "--update-business-cache" not in result.stdout

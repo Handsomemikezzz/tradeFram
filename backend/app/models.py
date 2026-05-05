@@ -92,26 +92,6 @@ class MarketQuote(Base):
     stock: Mapped[Stock] = relationship()
 
 
-class PriceBar(Base):
-    __tablename__ = "price_bar"
-    __table_args__ = (UniqueConstraint("code", "trade_date", "source", name="uq_price_bar_code_date_source"),)
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    code: Mapped[str] = mapped_column(String(6), ForeignKey("stock.code"), nullable=False, index=True)
-    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    open: Mapped[float] = mapped_column(Float, nullable=False)
-    high: Mapped[float] = mapped_column(Float, nullable=False)
-    low: Mapped[float] = mapped_column(Float, nullable=False)
-    close: Mapped[float] = mapped_column(Float, nullable=False)
-    volume: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    amount: Mapped[float] = mapped_column(Float, nullable=False, default=0)
-    source: Mapped[str] = mapped_column(String(64), nullable=False)
-    price_adjustment: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
-
-    stock: Mapped[Stock] = relationship()
-
-
 class FinancialSnapshot(Base):
     __tablename__ = "financial_snapshot"
     __table_args__ = (UniqueConstraint("code", "report_period", "source", name="uq_financial_snapshot_code_period_source"),)

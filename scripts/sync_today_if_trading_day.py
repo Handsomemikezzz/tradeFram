@@ -24,7 +24,6 @@ def main() -> int:
     parser.add_argument("--resume-run-id")
     parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--update-business-cache", action="store_true")
     args = parser.parse_args()
 
     if args.provider.strip().lower() not in {"akshare", "ak"}:
@@ -52,7 +51,6 @@ def main() -> int:
             resume_run_id=args.resume_run_id,
             retry_failed=args.retry_failed,
             dry_run=args.dry_run,
-            update_business_cache=args.update_business_cache,
         ),
         provider=provider,
     )

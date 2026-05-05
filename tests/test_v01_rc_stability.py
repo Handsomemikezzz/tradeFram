@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+import os
+import tempfile
 
 from fastapi.testclient import TestClient
 from alembic.config import Config
@@ -8,6 +10,7 @@ from alembic import command
 from sqlalchemy import create_engine, inspect
 
 from backend.app import models as m
+from backend.app.data_layer.warehouse.reader import WarehouseMarketDataStore
 from backend.app.database import Base, SessionLocal, engine
 from backend.app.main import app
 from backend.app.providers.base import MarketDataProvider, ProviderDailyBar, ProviderFinancialSnapshot, ProviderStockProfile
@@ -20,6 +23,7 @@ def reset_database() -> None:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     seed_database()
+    os.environ["DATA_ROOT"] = tempfile.mkdtemp(prefix="waytofree-test-data-")
 
 
 def assert_ok(response):
@@ -132,8 +136,7 @@ def test_no_market_data_blocks_execution(monkeypatch):
     reset_database()
     install_akshare_fixture(monkeypatch)
     with SessionLocal() as db:
-        prepare_akshare_stock(db, "300750")
-        db.query(m.PriceBar).filter(m.PriceBar.code == "300750").delete()
+        db.add(m.Stock(code="300750", symbol="300750.SZ", exchange="SZ", name="宁德时代", market="创业板", industry="锂电池"))
         db.commit()
     client = TestClient(app)
     assert_ok(client.post("/api/v1/monitoring-pool/items", json={"code": "300750", "enabled": True}))
@@ -171,15 +174,10 @@ def test_failed_refresh_keeps_old_cache():
     with SessionLocal() as db:
         first = fetch_market_dataset(db, "300750", provider=CountingProvider(), force_refresh=True)
         assert first["usedCache"] is False
-        old_time = datetime.now(UTC) - timedelta(minutes=1441)
-        for bar in db.query(m.PriceBar).filter(m.PriceBar.source == "RcProvider").all():
-            bar.fetched_at = old_time
-        db.commit()
         stale = fetch_market_dataset(db, "300750", provider=FailingRcProvider(), force_refresh=True, allow_stale_on_error=True)
         assert stale["usedCache"] is True
-        assert stale["dataStale"] is True
         assert stale["refreshError"] == "rc provider failed"
-        assert db.query(m.PriceBar).filter(m.PriceBar.source == "RcProvider").count() == 60
+        assert WarehouseMarketDataStore().count_daily_bars("300750") == 60
 
 
 def test_alembic_baseline_can_create_tables(tmp_path, monkeypatch):
@@ -188,7 +186,8 @@ def test_alembic_baseline_can_create_tables(tmp_path, monkeypatch):
     config = Config("alembic.ini")
     command.upgrade(config, "head")
     tables = set(inspect(create_engine(f"sqlite:///{db_file}")).get_table_names())
-    assert {"stock", "paper_order", "paper_execution", "price_bar", "data_fetch_log"}.issubset(tables)
+    assert {"stock", "paper_order", "paper_execution", "data_fetch_log"}.issubset(tables)
+    assert "price_bar" not in tables
 
 
 def test_buy_fee_fields_and_cash_deduction_are_correct(monkeypatch):

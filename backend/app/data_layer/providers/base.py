@@ -76,7 +76,7 @@ class DataLayerProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_daily_bars(self, code: str, start_date: date, end_date: date) -> list[DataLayerDailyBar]:
+    def get_daily_bars(self, code: str, start_date: date, end_date: date, *, price_adjustment: str = "raw") -> list[DataLayerDailyBar]:
         raise NotImplementedError
 
     @abstractmethod

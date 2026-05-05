@@ -5,10 +5,13 @@ import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import pandas as pd
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from .. import models as m
+from ..data_layer.storage.parquet_store import ParquetStore
+from ..data_layer.warehouse.reader import WarehouseMarketDataStore, WarehousePriceBar
 from ..providers.akshare_provider import AkShareMarketDataProvider
 from ..providers.base import MarketDataProvider, ProviderDailyBar, ProviderFinancialSnapshot, ProviderStockProfile
 from ..utils import dt_iso, new_id
@@ -96,8 +99,8 @@ def fetch_market_dataset(
         financial = _safe_financial(provider, code)
         calendar = _safe_calendar(provider, start_date, end_date)
 
+        _write_provider_bars_to_warehouse(profile, bars, provider.name)
         stock = _upsert_stock(db, profile, financial, bars[-1])
-        _replace_price_bars(db, code, provider.name, bars)
         _insert_quote(db, stock, provider.name, bars)
         _upsert_financial(db, code, provider.name, financial)
         _upsert_calendar(db, provider.name, calendar)
@@ -158,12 +161,8 @@ def refresh_stock_data(db: Session, raw_code: str, provider_name: str | None = N
 def get_stock_data_status(db: Session, raw_code: str, provider_name: str | None = None) -> dict[str, Any]:
     code, symbol, exchange = normalize_stock_code(raw_code)
     provider = get_provider(provider_name) if provider_name else get_provider()
-    latest_bar = (
-        db.query(m.PriceBar)
-        .filter(m.PriceBar.code == code, m.PriceBar.source == provider.name)
-        .order_by(desc(m.PriceBar.trade_date))
-        .first()
-    )
+    warehouse = WarehouseMarketDataStore()
+    latest_bar = warehouse.latest_bar(code)
     financial = (
         db.query(m.FinancialSnapshot)
         .filter(m.FinancialSnapshot.code == code, m.FinancialSnapshot.source == provider.name)
@@ -176,7 +175,7 @@ def get_stock_data_status(db: Session, raw_code: str, provider_name: str | None 
         .order_by(desc(m.DataFetchLog.started_at))
         .first()
     )
-    bar_count = db.query(m.PriceBar).filter(m.PriceBar.code == code, m.PriceBar.source == provider.name).count()
+    bar_count = warehouse.count_daily_bars(code)
     latest_fetched_at = latest_bar.fetched_at if latest_bar else None
     cache_fresh = _is_cache_fresh(latest_fetched_at) if latest_fetched_at else False
     has_cache = latest_bar is not None
@@ -231,48 +230,31 @@ def fetch_log_payload(log: m.DataFetchLog) -> dict[str, Any]:
     }
 
 
-def get_recent_price_bars(db: Session, code: str, limit: int = 60) -> list[m.PriceBar]:
-    latest_success = (
-        db.query(m.DataFetchLog)
-        .filter(m.DataFetchLog.code == code, m.DataFetchLog.status == "SUCCESS")
-        .order_by(desc(m.DataFetchLog.finished_at))
-        .first()
-    )
-    query = db.query(m.PriceBar).filter(m.PriceBar.code == code)
-    if latest_success is not None:
-        query = query.filter(m.PriceBar.source == latest_success.provider)
-    rows = query.order_by(desc(m.PriceBar.trade_date)).limit(limit).all()
-    return list(reversed(rows))
+def get_recent_price_bars(db: Session | None, code: str, limit: int = 60) -> list[WarehousePriceBar]:
+    return WarehouseMarketDataStore().get_daily_bars(code, limit=limit)
 
 
 def _cached_dataset(db: Session, code: str, source: str) -> dict[str, Any] | None:
     stock = db.get(m.Stock, code)
     if stock is None:
         return None
-    bar_rows = (
-        db.query(m.PriceBar)
-        .filter(m.PriceBar.code == code, m.PriceBar.source == source)
-        .order_by(desc(m.PriceBar.trade_date))
-        .limit(120)
-        .all()
-    )
+    bar_rows = WarehouseMarketDataStore().get_daily_bars(code, limit=120)
     if not bar_rows:
         return None
-    bars = list(reversed(bar_rows))
     financial = (
         db.query(m.FinancialSnapshot)
         .filter(m.FinancialSnapshot.code == code, m.FinancialSnapshot.source == source)
         .order_by(desc(m.FinancialSnapshot.fetched_at))
         .first()
     )
-    latest_fetched_at = max(bar.fetched_at for bar in bars)
+    latest_fetched_at = max(bar.fetched_at for bar in bar_rows)
     return {
         "stock": stock,
-        "bars": bars,
+        "bars": bar_rows,
         "financial": financial,
         "dataUpdatedAt": latest_fetched_at,
         "latestFetchedAt": latest_fetched_at,
-        "dataCompleteness": _completeness(len(bars), financial is not None, False),
+        "dataCompleteness": _completeness(len(bar_rows), financial is not None, False),
     }
 
 
@@ -308,12 +290,8 @@ def _safe_calendar(provider: MarketDataProvider, start_date: date, end_date: dat
 
 def _upsert_stock(db: Session, profile: ProviderStockProfile, financial: ProviderFinancialSnapshot | None, latest_bar: ProviderDailyBar) -> m.Stock:
     stock = db.get(m.Stock, profile.code)
-    prev = (
-        db.query(m.PriceBar)
-        .filter(m.PriceBar.code == profile.code, m.PriceBar.trade_date < latest_bar.trade_date)
-        .order_by(desc(m.PriceBar.trade_date))
-        .first()
-    )
+    previous_bars = WarehouseMarketDataStore().get_daily_bars(profile.code, end_date=latest_bar.trade_date - timedelta(days=1), limit=1)
+    prev = previous_bars[-1] if previous_bars else None
     change = round(latest_bar.close - prev.close, 2) if prev else 0.0
     change_percent = round((change / prev.close) * 100, 2) if prev and prev.close else 0.0
     if stock is None:
@@ -348,25 +326,39 @@ def _upsert_stock(db: Session, profile: ProviderStockProfile, financial: Provide
     return stock
 
 
-def _replace_price_bars(db: Session, code: str, source: str, bars: list[ProviderDailyBar]) -> None:
-    db.query(m.PriceBar).filter(m.PriceBar.code == code, m.PriceBar.source == source).delete(synchronize_session=False)
-    for bar in bars:
-        db.add(
-            m.PriceBar(
-                id=new_id("bar"),
-                code=code,
-                trade_date=bar.trade_date,
-                open=bar.open,
-                high=bar.high,
-                low=bar.low,
-                close=bar.close,
-                volume=bar.volume,
-                amount=bar.amount,
-                source=source,
-                price_adjustment="none",
-            )
-        )
-    db.flush()
+def _write_provider_bars_to_warehouse(profile: ProviderStockProfile, bars: list[ProviderDailyBar], source: str) -> None:
+    if not bars:
+        return
+    store = ParquetStore()
+    path = WarehouseMarketDataStore().daily_bars_path
+    frame = pd.DataFrame(
+        [
+            {
+                "code": profile.code,
+                "symbol": profile.symbol,
+                "exchange": profile.exchange,
+                "trade_date": bar.trade_date,
+                "open": bar.open,
+                "high": bar.high,
+                "low": bar.low,
+                "close": bar.close,
+                "volume": bar.volume,
+                "amount": bar.amount,
+                "price_adjustment": "raw",
+                "source_provider": source,
+                "source_updated_at": datetime.now(UTC),
+            }
+            for bar in bars
+        ]
+    )
+    partition_path = path / f"code={profile.code}"
+    if partition_path.exists():
+        current = store.read_dataset(partition_path)
+        if "code" not in current.columns:
+            current["code"] = profile.code
+        frame = pd.concat([current, frame], ignore_index=True)
+    frame = frame.drop_duplicates(["code", "trade_date", "price_adjustment"], keep="last")
+    store.write_dataset(partition_path, frame.drop(columns=["code"]), overwrite=True)
 
 
 def _insert_quote(db: Session, stock: m.Stock, source: str, bars: list[ProviderDailyBar]) -> None:

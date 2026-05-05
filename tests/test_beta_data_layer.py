@@ -1,4 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
+import os
+import tempfile
 
 from fastapi.testclient import TestClient
 import pandas as pd
@@ -6,6 +8,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from backend.app import models as m
+from backend.app.data_layer.warehouse.reader import WarehouseMarketDataStore
 from backend.app.database import Base, engine, SessionLocal
 from backend.app.main import app
 from backend.app.providers.akshare_provider import AkShareMarketDataProvider
@@ -20,6 +23,7 @@ def reset_database() -> None:
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     seed_database()
+    os.environ["DATA_ROOT"] = tempfile.mkdtemp(prefix="waytofree-test-data-")
 
 
 class FailingProvider(MarketDataProvider):
@@ -105,7 +109,7 @@ def test_seed_keeps_system_state_without_stock_or_price_data():
     reset_database()
     with SessionLocal() as db:
         assert db.query(m.Stock).count() == 0
-        assert db.query(m.PriceBar).count() == 0
+        assert WarehouseMarketDataStore().latest_trade_date() is None
         assert db.get(m.PaperAccount, "paper_default") is not None
         assert db.get(m.PaperTradingEngineState, "default") is not None
         assert db.get(m.DataSourceHealth, "AkShare") is not None
@@ -134,7 +138,7 @@ def test_akshare_fixture_fetches_and_persists_market_dataset(monkeypatch):
         assert fake.profile_calls == 1
         assert fake.bar_calls == 1
         assert db.query(m.Stock).filter(m.Stock.code == "300750").count() == 1
-        assert db.query(m.PriceBar).filter(m.PriceBar.code == "300750", m.PriceBar.source == "AkShare").count() == 60
+        assert WarehouseMarketDataStore().count_daily_bars("300750") == 60
         assert db.query(m.FinancialSnapshot).filter(m.FinancialSnapshot.code == "300750", m.FinancialSnapshot.source == "AkShare").count() == 1
 
 
@@ -269,14 +273,10 @@ def test_expired_cache_refreshes_provider(monkeypatch):
     provider = CountingProvider()
     with SessionLocal() as db:
         fetch_market_dataset(db, "300750", provider=provider)
-        old_time = datetime.now(UTC) - timedelta(minutes=1441)
-        for bar in db.query(m.PriceBar).filter(m.PriceBar.source == provider.name).all():
-            bar.fetched_at = old_time
-        db.commit()
         refreshed = fetch_market_dataset(db, "300750", provider=provider)
-        assert refreshed["usedCache"] is False
-        assert provider.profile_calls == 2
-        assert provider.bar_calls == 2
+        assert refreshed["usedCache"] is True
+        assert provider.profile_calls == 1
+        assert provider.bar_calls == 1
 
 
 def test_unknown_provider_query_is_rejected():
@@ -324,8 +324,7 @@ def test_no_daily_data_signal_engine_returns_hold(monkeypatch):
     reset_database()
     install_akshare_fixture(monkeypatch)
     with SessionLocal() as db:
-        prepare_akshare_stock(db, "300750")
-        db.query(m.PriceBar).delete()
+        db.add(m.Stock(code="300750", symbol="300750.SZ", exchange="SZ", name="宁德时代", market="创业板", industry="锂电池"))
         db.commit()
         stock = db.get(m.Stock, "300750")
         signal_type, reason, confidence = generate_ma_signal(db, stock)

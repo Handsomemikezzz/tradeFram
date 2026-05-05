@@ -17,7 +17,8 @@ from ..storage.parquet_store import ParquetStore
 from ..storage.paths import DataLayerPaths
 from ..warehouse.normalize import normalize_daily_bars, normalize_index_daily_bars, normalize_instruments, normalize_trading_calendar
 from ..warehouse.schemas import CORE_INDEXES
-from .business_cache import backfill_business_cache
+
+PRICE_ADJUSTMENTS = ("raw", "qfq", "hfq")
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,6 @@ class SyncOptions:
     resume_run_id: str | None = None
     retry_failed: bool = False
     dry_run: bool = False
-    update_business_cache: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,23 +104,25 @@ def _run_sync(
         selected_instruments = _select_instruments(instruments, options)
         completed_daily = metadata.successful_item_keys(resume_run_id, dataset="daily_bars") if options.resume else set()
         for instrument in selected_instruments:
-            if instrument.code in completed_daily:
-                skipped_items += 1
-                continue
-            item_id = metadata.record_item(run_id=run_id, provider=provider.name, dataset="daily_bars", key=instrument.code, start_date=start_date, end_date=end_date)
-            try:
-                bars = _with_retries(lambda: provider.get_daily_bars(instrument.code, start_date, end_date), options)
-                frame = normalize_daily_bars(bars, source_provider=provider.name, source_updated_at=updated_at)
-                warning_count += _validate_or_raise(validate_daily_bars(frame))
-                if not options.dry_run:
-                    _write_raw(store, paths, provider.name, "daily_bars", instrument.code, frame)
-                    _merge_warehouse(store, paths.warehouse_root / "daily_bars", frame, ["code", "trade_date", "price_adjustment"], partition_cols=["code"])
-                metadata.mark_item_success(item_id, row_count=len(frame))
-                success_items += 1
-            except Exception as exc:
-                metadata.mark_item_failed(item_id, error_message=str(exc))
-                failed_items += 1
-            _sleep(options)
+            for price_adjustment in PRICE_ADJUSTMENTS:
+                item_key = f"{instrument.code}:{price_adjustment}"
+                if item_key in completed_daily:
+                    skipped_items += 1
+                    continue
+                item_id = metadata.record_item(run_id=run_id, provider=provider.name, dataset="daily_bars", key=item_key, start_date=start_date, end_date=end_date)
+                try:
+                    bars = _with_retries(lambda price_adjustment=price_adjustment: provider.get_daily_bars(instrument.code, start_date, end_date, price_adjustment=price_adjustment), options)
+                    frame = normalize_daily_bars(bars, source_provider=provider.name, source_updated_at=updated_at)
+                    warning_count += _validate_or_raise(validate_daily_bars(frame))
+                    if not options.dry_run:
+                        _write_raw(store, paths, provider.name, "daily_bars", item_key, frame)
+                        _merge_warehouse(store, paths.warehouse_root / "daily_bars", frame, ["code", "trade_date", "price_adjustment"], partition_cols=["code"])
+                    metadata.mark_item_success(item_id, row_count=len(frame))
+                    success_items += 1
+                except Exception as exc:
+                    metadata.mark_item_failed(item_id, error_message=str(exc))
+                    failed_items += 1
+                _sleep(options)
 
         completed_indexes = metadata.successful_item_keys(resume_run_id, dataset="index_daily_bars") if options.resume else set()
         for index_code in CORE_INDEXES:
@@ -141,9 +143,6 @@ def _run_sync(
                 metadata.mark_item_failed(item_id, error_message=str(exc))
                 failed_items += 1
             _sleep(options)
-
-        if options.update_business_cache and not options.dry_run:
-            backfill_business_cache(data_root=paths.root, provider_name=provider.name)
 
         status = "success" if failed_items == 0 else "partial"
         metadata.finish_run(run_id, status=status)
