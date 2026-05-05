@@ -13,6 +13,17 @@ RAW_PRICE_ADJUSTMENTS = {"raw", "none"}
 
 
 @dataclass(frozen=True)
+class WarehouseInstrument:
+    code: str
+    symbol: str
+    exchange: str
+    name: str
+    market: str
+    industry: str
+    status: str
+
+
+@dataclass(frozen=True)
 class WarehousePriceBar:
     code: str
     symbol: str
@@ -37,6 +48,30 @@ class WarehouseMarketDataStore:
     @property
     def daily_bars_path(self) -> Path:
         return self.data_root / "warehouse" / "daily_bars"
+
+    @property
+    def instruments_path(self) -> Path:
+        return self.data_root / "warehouse" / "instruments"
+
+    def list_instruments(self) -> list[WarehouseInstrument]:
+        if not self.instruments_path.exists():
+            return []
+        frame = self.store.read_dataset(self.instruments_path)
+        if frame.empty:
+            return []
+        frame["code"] = frame["code"].astype(str).str.zfill(6)
+        return [
+            WarehouseInstrument(
+                code=str(row.code).zfill(6),
+                symbol=str(row.symbol),
+                exchange=str(row.exchange),
+                name=str(row.name),
+                market=str(row.market),
+                industry=str(row.industry),
+                status=str(getattr(row, "status", "active")),
+            )
+            for row in frame.sort_values("code").itertuples(index=False)
+        ]
 
     def get_daily_bars(
         self,

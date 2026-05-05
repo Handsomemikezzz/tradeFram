@@ -31,6 +31,7 @@ def assert_ok(response):
 
 
 def add_stock(code: str, name: str, *, market: str = "上证主板", exchange: str = "SH") -> None:
+    add_instrument(code, name, market=market, exchange=exchange)
     with SessionLocal() as db:
         db.add(
             m.Stock(
@@ -43,6 +44,31 @@ def add_stock(code: str, name: str, *, market: str = "上证主板", exchange: s
             )
         )
         db.commit()
+
+
+def add_instrument(code: str, name: str, *, market: str = "主板", exchange: str = "SH", industry: str = "测试") -> None:
+    store = ParquetStore()
+    path = Path(os.environ["DATA_ROOT"]) / "warehouse" / "instruments"
+    rows = []
+    if os.path.exists(path):
+        rows = store.read_dataset(path).to_dict(orient="records")
+    rows = [row for row in rows if str(row["code"]).zfill(6) != code]
+    rows.append(
+        {
+            "code": code,
+            "symbol": f"{code}.{exchange}",
+            "exchange": exchange,
+            "name": name,
+            "market": market,
+            "industry": industry,
+            "list_date": None,
+            "delist_date": None,
+            "status": "active",
+            "source_provider": "fake",
+            "source_updated_at": datetime(2026, 5, 5, tzinfo=UTC),
+        }
+    )
+    store.write_dataset(path, pd.DataFrame(rows), overwrite=True)
 
 
 def add_bar(code: str, trade_date: date, close: float, *, amount: float = 10000, source: str = "AkShare", adjustment: str = "none") -> None:
@@ -108,6 +134,30 @@ def seed_two_board_candidate_then_break() -> None:
     add_bar("600005", days[4], 9.5)
 
 
+def seed_two_board_candidate_then_break_in_warehouse() -> None:
+    add_instrument("600001", "主板断板")
+    add_instrument("600002", "主板继续涨停")
+    add_instrument("600003", "主板停牌")
+    add_instrument("300001", "创业板排除", market="创业板", exchange="SZ")
+    add_instrument("600004", "ST排除")
+    add_instrument("600005", "交易日锚点")
+
+    days = [date(2026, 4, 24), date(2026, 4, 27), date(2026, 4, 28), date(2026, 4, 29), date(2026, 4, 30)]
+    for code in ["600001", "600002", "600003", "300001", "600004"]:
+        add_bar(code, days[0], 10.0)
+        add_bar(code, days[1], 11.0)
+        add_bar(code, days[2], 12.1)
+        add_bar(code, days[3], 13.31)
+    for close_date, close in zip(days[:4], [10.0, 10.2, 10.3, 10.4], strict=True):
+        add_bar("600005", close_date, close)
+
+    add_bar("600001", days[4], 13.50, amount=26000)
+    add_bar("600002", days[4], 14.64, amount=32000)
+    add_bar("300001", days[4], 13.50)
+    add_bar("600004", days[4], 13.50)
+    add_bar("600005", days[4], 9.5)
+
+
 def test_main_board_limit_up_price_uses_exchange_rounding():
     assert calculate_limit_up_price(12.1) == 13.31
     assert calculate_limit_up_price(13.31) == 14.64
@@ -137,6 +187,19 @@ def test_generate_snapshot_finds_close_breaks_and_suspended_breaks():
     assert snapshot["items"][0]["intradayBreak"] is None
     assert snapshot["items"][1]["breakType"] == "SUSPENDED"
     assert snapshot["items"][1]["changePercent"] is None
+
+
+def test_generate_snapshot_uses_warehouse_instruments_without_sqlite_stocks():
+    reset_database()
+    seed_two_board_candidate_then_break_in_warehouse()
+    client = TestClient(app)
+
+    snapshot = assert_ok(client.post("/api/v1/limit-up-breaks/snapshots", json={"tradeDate": "2026-04-30"}))
+
+    assert snapshot["candidateCount"] == 3
+    assert [item["code"] for item in snapshot["items"]] == ["600001", "600003"]
+    with SessionLocal() as db:
+        assert db.query(m.Stock).count() == 0
 
 
 def test_snapshot_generation_overwrites_same_day_threshold_and_provider():

@@ -6,7 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy.orm import Session
 
 from .. import models as m
-from ..data_layer.warehouse.reader import WarehouseMarketDataStore, WarehousePriceBar
+from ..data_layer.warehouse.reader import WarehouseInstrument, WarehouseMarketDataStore, WarehousePriceBar
 from ..utils import new_id
 
 
@@ -38,7 +38,7 @@ def generate_limit_up_break_snapshot(db: Session, trade_date: date | None = None
     if previous_trade_date is None:
         raise LimitUpBreakError("INSUFFICIENT_HISTORY", f"{target_date.isoformat()} 缺少上一交易日行情", status_code=422)
 
-    candidates: list[tuple[m.Stock, int]] = []
+    candidates: list[tuple[WarehouseInstrument, int]] = []
     for stock in _main_board_non_st_stocks(db):
         height = _limit_up_height_ending_on(db, stock.code, previous_trade_date, trade_dates, provider)
         if height >= threshold:
@@ -102,7 +102,7 @@ def _upsert_snapshot(db: Session, trade_date: date, previous_trade_date: date, t
 
 def _new_item(
     snapshot: m.LimitUpBreakSnapshot,
-    stock: m.Stock,
+    stock: WarehouseInstrument,
     height: int,
     change_percent: float | None,
     amount: float | None,
@@ -122,12 +122,12 @@ def _new_item(
     )
 
 
-def _main_board_non_st_stocks(db: Session) -> list[m.Stock]:
-    stocks = db.query(m.Stock).order_by(m.Stock.code).all()
-    return [stock for stock in stocks if _is_main_board(stock) and not _is_st(stock)]
+def _main_board_non_st_stocks(db: Session) -> list[WarehouseInstrument]:
+    stocks = WarehouseMarketDataStore().list_instruments()
+    return [stock for stock in stocks if stock.status.lower() == "active" and _is_main_board(stock) and not _is_st(stock)]
 
 
-def _is_main_board(stock: m.Stock) -> bool:
+def _is_main_board(stock: WarehouseInstrument) -> bool:
     if stock.exchange == "SH":
         return stock.code.startswith(("600", "601", "603", "605"))
     if stock.exchange == "SZ":
@@ -135,7 +135,7 @@ def _is_main_board(stock: m.Stock) -> bool:
     return False
 
 
-def _is_st(stock: m.Stock) -> bool:
+def _is_st(stock: WarehouseInstrument) -> bool:
     normalized = stock.name.upper().replace(" ", "")
     return normalized.startswith(("*ST", "ST", "S*ST"))
 
