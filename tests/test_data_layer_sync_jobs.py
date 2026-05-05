@@ -5,12 +5,15 @@ from datetime import date
 
 import pandas as pd
 
+from backend.app import models as m
+from backend.app.database import Base, SessionLocal, engine
 from backend.app.data_layer.providers.base import (
     DataLayerDailyBar,
     DataLayerIndexDailyBar,
     DataLayerInstrument,
     DataLayerTradingDay,
 )
+from backend.app.data_layer.sync.business_cache import backfill_business_cache
 from backend.app.data_layer.storage.parquet_store import ParquetStore
 from backend.app.data_layer.sync.jobs import SyncOptions, _merge_warehouse, init_history_data, sync_daily_data
 
@@ -143,3 +146,94 @@ def test_merge_warehouse_reads_only_matching_partition(tmp_path):
     result = store.read_dataset(path)
     assert len(result[result["code"] == "600519"]) == 2
     assert len(result[result["code"] == "000001"]) == 1
+
+
+def test_business_cache_rebuilds_price_bars_with_stable_ids(tmp_path):
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+    store = ParquetStore()
+    instruments_path = tmp_path / "data" / "warehouse" / "instruments"
+    daily_path = tmp_path / "data" / "warehouse" / "daily_bars"
+    store.write_dataset(
+        instruments_path,
+        pd.DataFrame(
+            [
+                {
+                    "code": "000001",
+                    "symbol": "000001.SZ",
+                    "exchange": "SZ",
+                    "name": "平安银行",
+                    "market": "主板",
+                    "industry": "银行",
+                }
+            ]
+        ),
+        overwrite=True,
+    )
+    store.write_dataset(
+        daily_path,
+        pd.DataFrame(
+            [
+                _daily_row(date(2026, 4, 29), close=10, high=11, volume=100, amount=1000),
+                _daily_row(date(2026, 4, 29), close=11, high=12, volume=200, amount=2000),
+                _daily_row(date(2026, 4, 29), close=999, high=1, volume=1, amount=1, price_adjustment="qfq"),
+                _daily_row(date(2026, 4, 30), close=12, high=12, volume=300, amount=3000),
+            ]
+        ),
+        partition_cols=["code"],
+        overwrite=True,
+    )
+
+    with SessionLocal() as db:
+        db.add(m.Stock(code="000001", symbol="000001.SZ", exchange="SZ", name="旧名称", market="主板", industry="银行"))
+        db.add(_price_bar("old_fake", date(2026, 4, 28), source="fake", close=1))
+        db.add(_price_bar("other_provider", date(2026, 4, 28), source="other", close=2))
+        db.commit()
+
+    backfill_business_cache(data_root=tmp_path / "data", provider_name="fake")
+    backfill_business_cache(data_root=tmp_path / "data", provider_name="fake")
+
+    with SessionLocal() as db:
+        fake_bars = db.query(m.PriceBar).filter(m.PriceBar.source == "fake").order_by(m.PriceBar.trade_date).all()
+        assert [bar.id for bar in fake_bars] == ["bar_fake_000001_20260429", "bar_fake_000001_20260430"]
+        assert [bar.close for bar in fake_bars] == [11, 12]
+        assert db.query(m.PriceBar).filter(m.PriceBar.source == "other").count() == 1
+
+
+def _daily_row(
+    trade_date: date,
+    *,
+    close: float,
+    high: float,
+    volume: int,
+    amount: float,
+    price_adjustment: str = "none",
+) -> dict:
+    return {
+        "code": "000001",
+        "trade_date": trade_date,
+        "open": 10,
+        "high": high,
+        "low": 9,
+        "close": close,
+        "volume": volume,
+        "amount": amount,
+        "price_adjustment": price_adjustment,
+    }
+
+
+def _price_bar(id_: str, trade_date: date, *, source: str, close: float) -> m.PriceBar:
+    return m.PriceBar(
+        id=id_,
+        code="000001",
+        trade_date=trade_date,
+        open=close,
+        high=close,
+        low=close,
+        close=close,
+        volume=1,
+        amount=1,
+        source=source,
+        price_adjustment="none",
+    )
