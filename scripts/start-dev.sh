@@ -41,11 +41,15 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# shellcheck disable=SC1091
-source .venv/bin/activate
+VENV_BIN="${ROOT}/.venv/bin"
+PYTHON_BIN="${PYTHON_BIN:-$VENV_BIN/python3}"
 
 echo "启动后端 http://127.0.0.1:${BACKEND_PORT}"
-uvicorn backend.app.main:app --reload --host 127.0.0.1 --port "$BACKEND_PORT" &
+if ! "$PYTHON_BIN" -c "import uvicorn" >/dev/null 2>&1; then
+  echo "错误：当前虚拟环境未安装 uvicorn。请先执行：$VENV_BIN/pip install -r requirements.txt"
+  exit 1
+fi
+"$PYTHON_BIN" -m uvicorn backend.app.main:app --reload --host 127.0.0.1 --port "$BACKEND_PORT" &
 BACKEND_PID=$!
 
 echo "等待 /health"
