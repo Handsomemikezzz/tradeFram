@@ -12,7 +12,7 @@ from backend.app.data_layer.providers.base import (
     DataLayerTradingDay,
 )
 from backend.app.data_layer.storage.parquet_store import ParquetStore
-from backend.app.data_layer.sync.jobs import SyncOptions, init_history_data, sync_daily_data
+from backend.app.data_layer.sync.jobs import SyncOptions, _merge_warehouse, init_history_data, sync_daily_data
 
 
 class FakeDataLayerProvider:
@@ -111,3 +111,35 @@ def test_sync_daily_data_writes_recent_window_and_backfill_is_explicit(tmp_path,
     assert calls == ["fake"]
     daily = ParquetStore().read_dataset(tmp_path / "data" / "warehouse" / "daily_bars")
     assert set(daily["code"]) == {"600519", "000001"}
+
+
+def test_merge_warehouse_reads_only_matching_partition(tmp_path):
+    store = ParquetStore()
+    path = tmp_path / "data" / "warehouse" / "daily_bars"
+    existing = pd.DataFrame(
+        [
+            {"code": "600519", "trade_date": date(2026, 4, 29), "close": 10.5, "price_adjustment": "none"},
+            {"code": "000001", "trade_date": date(2026, 4, 29), "close": 9.5, "price_adjustment": "none"},
+        ]
+    )
+    store.write_dataset(path, existing, partition_cols=["code"], overwrite=True)
+    calls: list[str] = []
+    original_read_dataset = store.read_dataset
+
+    def tracking_read_dataset(read_path):
+        calls.append(str(read_path.relative_to(path)))
+        return original_read_dataset(read_path)
+
+    store.read_dataset = tracking_read_dataset
+    _merge_warehouse(
+        store,
+        path,
+        pd.DataFrame([{"code": "600519", "trade_date": date(2026, 4, 30), "close": 11.5, "price_adjustment": "none"}]),
+        ["code", "trade_date", "price_adjustment"],
+        partition_cols=["code"],
+    )
+
+    assert calls == ["code=600519"]
+    result = store.read_dataset(path)
+    assert len(result[result["code"] == "600519"]) == 2
+    assert len(result[result["code"] == "000001"]) == 1

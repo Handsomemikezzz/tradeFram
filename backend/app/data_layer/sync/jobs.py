@@ -189,6 +189,19 @@ def _write_raw(store: ParquetStore, paths: DataLayerPaths, provider_name: str, d
 
 
 def _merge_warehouse(store: ParquetStore, path: Path, frame: pd.DataFrame, keys: list[str], *, partition_cols: list[str] | None = None) -> None:
+    if not frame.empty and partition_cols and len(partition_cols) == 1 and partition_cols[0] in frame.columns:
+        partition_col = partition_cols[0]
+        values = frame[partition_col].dropna().astype(str).unique()
+        if len(values) == 1:
+            partition_path = path / f"{partition_col}={values[0]}"
+            if partition_path.exists():
+                current = store.read_dataset(partition_path)
+                if partition_col not in current.columns:
+                    current[partition_col] = values[0]
+                frame = pd.concat([current, frame], ignore_index=True)
+            frame = frame.drop_duplicates(subset=keys, keep="last")
+            store.write_dataset(partition_path, frame.drop(columns=[partition_col]), overwrite=True)
+            return
     if path.exists():
         current = store.read_dataset(path)
         frame = pd.concat([current, frame], ignore_index=True)
