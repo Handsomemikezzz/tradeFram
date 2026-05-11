@@ -61,14 +61,6 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
-      {/* Risk Warning Banner */}
-      <div className="p-2 bg-amber-50 border border-amber-200 rounded flex items-center shadow-sm">
-        <span className="text-amber-600 mr-2 text-sm">⚠️</span>
-        <p className="text-[11px] text-amber-800 font-medium">
-          {overview?.riskDisclaimer || '风险提示：本系统仅用于研究学习和模拟交易，不构成投资建议。所有交易结果均为模拟数据，请知悉。'}
-        </p>
-      </div>
-
       {overviewError && <div className="text-[11px] text-red-500">Dashboard 聚合数据加载失败：{overviewError}</div>}
 
       {/* Metric Cards */}

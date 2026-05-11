@@ -314,6 +314,49 @@ export interface LimitUpBreakSnapshotResponse {
   items: LimitUpBreakItemResponse[];
 }
 
+export type DataHealthStatus = 'READY' | 'STALE' | 'INCOMPLETE' | 'MISSING' | string;
+
+export interface DataHealthOverviewResponse {
+  asOfDate: string;
+  calendar: {
+    todayIsOpen: boolean;
+    latestOpenDate: string | null;
+    knownOpenDateCount: number;
+  };
+  dailyBars: {
+    status: DataHealthStatus;
+    latestTradeDate: string | null;
+    coverageDate: string | null;
+    availableBars: number;
+    expectedBars: number;
+    coverage: number;
+    minCoverage: number;
+  };
+  sync: {
+    runId: string;
+    provider: string;
+    jobType: string;
+    status: string;
+    startDate: string | null;
+    endDate: string | null;
+    startedAt: string | null;
+    finishedAt: string | null;
+    errorMessage: string | null;
+    successItems: number | null;
+    failedItems: number | null;
+    skippedItems: number | null;
+    warningCount: number | null;
+  } | null;
+  snapshot: {
+    status: DataHealthStatus;
+    tradeDate: string | null;
+    updatedAt: string | null;
+    candidateCount: number | null;
+    breakCount: number | null;
+    suspendedBreakCount: number | null;
+  };
+}
+
 export interface EngineResponse {
   active: boolean;
   mode: 'PAPER_TRADING_ONLY';

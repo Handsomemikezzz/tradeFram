@@ -46,6 +46,11 @@ class MetadataStore:
             raise KeyError(run_id)
         return dict(row)
 
+    def latest_run(self) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT 1").fetchone()
+        return dict(row) if row is not None else None
+
     def record_item(
         self,
         *,
