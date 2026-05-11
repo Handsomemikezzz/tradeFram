@@ -18,7 +18,11 @@ from ..storage.paths import DataLayerPaths
 from ..warehouse.normalize import normalize_daily_bars, normalize_index_daily_bars, normalize_instruments, normalize_trading_calendar
 from ..warehouse.schemas import CORE_INDEXES
 
-PRICE_ADJUSTMENTS = ("raw", "qfq", "hfq")
+PRICE_ADJUSTMENTS = ("raw",)
+
+
+class SyncCircuitBreaker(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,8 @@ class SyncOptions:
     resume_run_id: str | None = None
     retry_failed: bool = False
     dry_run: bool = False
+    circuit_breaker_min_items: int = 30
+    circuit_breaker_failure_rate: float = 0.8
 
 
 @dataclass(frozen=True)
@@ -65,8 +71,9 @@ def sync_daily_data(options: SyncOptions, *, provider: DataLayerProvider | None 
     end_date = options.end_date or date.today()
     calendar = provider.get_trading_calendar(end_date - timedelta(days=max(options.lookback_days * 3, 30)), end_date)
     open_days = [day.trade_date for day in calendar if day.is_open]
+    sync_end_date = open_days[-1] if open_days else end_date
     start_date = open_days[-options.lookback_days] if len(open_days) >= options.lookback_days else (open_days[0] if open_days else end_date)
-    return _run_sync("sync_daily_data", options, provider, start_date, end_date, prefetched_calendar=calendar)
+    return _run_sync("sync_daily_data", options, provider, start_date, sync_end_date, prefetched_calendar=calendar)
 
 
 def _run_sync(
@@ -103,6 +110,8 @@ def _run_sync(
 
         selected_instruments = _select_instruments(instruments, options)
         completed_daily = metadata.successful_item_keys(resume_run_id, dataset="daily_bars") if options.resume else set()
+        daily_success_items = 0
+        daily_failed_items = 0
         for instrument in selected_instruments:
             for price_adjustment in PRICE_ADJUSTMENTS:
                 item_key = f"{instrument.code}:{price_adjustment}"
@@ -119,9 +128,12 @@ def _run_sync(
                         _merge_warehouse(store, paths.warehouse_root / "daily_bars", frame, ["code", "trade_date", "price_adjustment"], partition_cols=["code"])
                     metadata.mark_item_success(item_id, row_count=len(frame))
                     success_items += 1
+                    daily_success_items += 1
                 except Exception as exc:
                     metadata.mark_item_failed(item_id, error_message=str(exc))
                     failed_items += 1
+                    daily_failed_items += 1
+                _raise_if_circuit_breaker_tripped(daily_success_items, daily_failed_items, options)
                 _sleep(options)
 
         completed_indexes = metadata.successful_item_keys(resume_run_id, dataset="index_daily_bars") if options.resume else set()
@@ -234,6 +246,17 @@ def _with_retries(fn, options: SyncOptions):
 def _sleep(options: SyncOptions) -> None:
     if options.sleep > 0:
         time.sleep(options.sleep)
+
+
+def _raise_if_circuit_breaker_tripped(success_items: int, failed_items: int, options: SyncOptions) -> None:
+    total = success_items + failed_items
+    if total < options.circuit_breaker_min_items:
+        return
+    if total == 0:
+        return
+    failure_rate = failed_items / total
+    if failure_rate >= options.circuit_breaker_failure_rate:
+        raise SyncCircuitBreaker(f"daily_bars failure rate {failure_rate:.0%} exceeded threshold after {total} items")
 
 
 def _write_report(

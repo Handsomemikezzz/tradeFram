@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..schemas import LimitUpBreakSnapshotCreate
 from ..serializers import limit_up_break_snapshot_payload
-from ..services.limit_up_breaks import LimitUpBreakError, generate_limit_up_break_snapshot, get_limit_up_break_snapshot
+from ..services.limit_up_breaks import LimitUpBreakError, generate_limit_up_break_snapshot, get_default_limit_up_break_snapshot, get_limit_up_break_snapshot
 from ..utils import api_error, ok
 
 router = APIRouter()
@@ -22,7 +22,21 @@ def create_limit_up_break_snapshot(payload: LimitUpBreakSnapshotCreate, db: Sess
         db.refresh(snapshot)
     except LimitUpBreakError as exc:
         db.rollback()
-        raise api_error(exc.status_code, exc.code, exc.message) from exc
+        raise api_error(exc.status_code, exc.code, exc.message, exc.details) from exc
+    return ok(limit_up_break_snapshot_payload(snapshot))
+
+
+@router.get("/limit-up-breaks/snapshots/default/latest")
+def read_default_limit_up_break_snapshot(
+    threshold: int = Query(2, ge=1),
+    provider: str = Query("AkShare"),
+    db: Session = Depends(get_db),
+):
+    snapshot, target_date = get_default_limit_up_break_snapshot(db, threshold=threshold, provider=provider)
+    if target_date is None:
+        raise api_error(404, "LIMIT_UP_BREAK_SNAPSHOT_NOT_FOUND", "无默认断板快照日期")
+    if snapshot is None:
+        raise api_error(404, "LIMIT_UP_BREAK_SNAPSHOT_NOT_FOUND", f"{target_date.isoformat()} 断板快照不存在")
     return ok(limit_up_break_snapshot_payload(snapshot))
 
 

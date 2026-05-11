@@ -17,7 +17,11 @@ import { ApiClientError, formatDateTime, limitUpBreakApi, LimitUpBreakItemRespon
 const DEFAULT_PROVIDER = 'AkShare';
 
 function todayText(): string {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function breakTypeLabel(type: string): string {
@@ -40,8 +44,15 @@ function sortItems(items: LimitUpBreakItemResponse[]): LimitUpBreakItemResponse[
   });
 }
 
+function snapshotErrorMessage(err: unknown): string {
+  if (err instanceof ApiClientError && err.code === 'DATA_COVERAGE_TOO_LOW') {
+    return `数据问题：${err.message}`;
+  }
+  return err instanceof Error ? err.message : '断板快照加载失败';
+}
+
 export default function LimitUpBreakMonitor() {
-  const [tradeDate, setTradeDate] = useState(todayText());
+  const [tradeDate, setTradeDate] = useState('');
   const [threshold, setThreshold] = useState(2);
   const [snapshot, setSnapshot] = useState<LimitUpBreakSnapshotResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -51,22 +62,20 @@ export default function LimitUpBreakMonitor() {
   const items = useMemo(() => sortItems(snapshot?.items || []), [snapshot]);
 
   const loadSnapshot = async () => {
-    if (!tradeDate) return;
     setLoading(true);
     try {
       let data: LimitUpBreakSnapshotResponse;
-      try {
+      if (tradeDate) {
         data = await limitUpBreakApi.getSnapshot(tradeDate, { threshold, provider: DEFAULT_PROVIDER });
-      } catch (err) {
-        if (!(err instanceof ApiClientError) || err.code !== 'LIMIT_UP_BREAK_SNAPSHOT_NOT_FOUND') throw err;
-        data = await limitUpBreakApi.createSnapshot({ tradeDate, threshold, provider: DEFAULT_PROVIDER });
+      } else {
+        data = await limitUpBreakApi.getDefaultSnapshot({ threshold, provider: DEFAULT_PROVIDER });
       }
       setSnapshot(data);
       if (data.tradeDate !== tradeDate) setTradeDate(data.tradeDate);
       setError(null);
     } catch (err) {
       setSnapshot(null);
-      setError(err instanceof Error ? err.message : '断板快照加载失败');
+      setError(snapshotErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -77,10 +86,9 @@ export default function LimitUpBreakMonitor() {
   }, []);
 
   const generateSnapshot = async () => {
-    if (!tradeDate) return;
     setGenerating(true);
     try {
-      const data = await limitUpBreakApi.createSnapshot({ tradeDate, threshold, provider: DEFAULT_PROVIDER });
+      const data = await limitUpBreakApi.createSnapshot({ tradeDate: tradeDate || undefined, threshold, provider: DEFAULT_PROVIDER });
       setSnapshot(data);
       if (data.tradeDate !== tradeDate) setTradeDate(data.tradeDate);
       setError(null);
@@ -88,7 +96,7 @@ export default function LimitUpBreakMonitor() {
         description: `${data.tradeDate} 候选 ${data.candidateCount} 只，断板 ${data.breakCount} 只`,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : '生成断板快照失败';
+      const message = snapshotErrorMessage(err);
       setError(message);
       toast.error(message);
     } finally {
@@ -110,7 +118,7 @@ export default function LimitUpBreakMonitor() {
         <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 shadow-sm">
           <div className="relative">
             <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <Input type="date" value={tradeDate} onChange={(event) => setTradeDate(event.target.value)} className="h-8 pl-8 w-[150px] text-[11px] bg-white border-gray-200 rounded" />
+            <Input type="date" value={tradeDate} onChange={(event) => setTradeDate(event.target.value)} className="h-8 pl-8 w-[150px] text-[11px] bg-white border-gray-200 rounded" placeholder={todayText()} />
           </div>
           <div className="flex items-center gap-1 px-2 h-8 rounded border border-gray-200 bg-gray-50">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">门槛</span>

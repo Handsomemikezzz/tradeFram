@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime
 import os
 from pathlib import Path
 import tempfile
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 import pandas as pd
@@ -13,7 +14,7 @@ from backend.app.data_layer.storage.parquet_store import ParquetStore
 from backend.app.database import Base, SessionLocal, engine
 from backend.app.main import app
 from backend.app.seed import seed_database
-from backend.app.services.limit_up_breaks import calculate_limit_up_price
+from backend.app.services.limit_up_breaks import calculate_limit_up_price, resolve_default_limit_up_break_trade_date
 
 
 def reset_database() -> None:
@@ -106,6 +107,22 @@ def add_bar(code: str, trade_date: date, close: float, *, amount: float = 10000,
     store.write_dataset(path, pd.DataFrame(rows), partition_cols=["code"], overwrite=True)
 
 
+def add_trading_calendar(days: list[tuple[date, bool]]) -> None:
+    store = ParquetStore()
+    path = Path(os.environ["DATA_ROOT"]) / "warehouse" / "trading_calendar"
+    rows = [
+        {
+            "trade_date": trade_date,
+            "exchange": "CN_A",
+            "is_open": is_open,
+            "source_provider": "fake",
+            "source_updated_at": datetime(2026, 5, 10, tzinfo=UTC),
+        }
+        for trade_date, is_open in days
+    ]
+    store.write_dataset(path, pd.DataFrame(rows), overwrite=True)
+
+
 def _adjustment_name(adjustment: str) -> str:
     return "raw" if adjustment in {"none", "raw"} else adjustment
 
@@ -158,6 +175,15 @@ def seed_two_board_candidate_then_break_in_warehouse() -> None:
     add_bar("600005", days[4], 9.5)
 
 
+def add_full_coverage_anchor_stocks() -> None:
+    days = [date(2026, 4, 24), date(2026, 4, 27), date(2026, 4, 28), date(2026, 4, 29), date(2026, 4, 30)]
+    for index in range(6, 12):
+        code = f"6000{index:02d}"
+        add_stock(code, f"覆盖锚点{index}")
+        for offset, trade_date in enumerate(days):
+            add_bar(code, trade_date, 10.0 + offset / 10)
+
+
 def test_main_board_limit_up_price_uses_exchange_rounding():
     assert calculate_limit_up_price(12.1) == 13.31
     assert calculate_limit_up_price(13.31) == 14.64
@@ -187,6 +213,24 @@ def test_generate_snapshot_finds_close_breaks_and_suspended_breaks():
     assert snapshot["items"][0]["intradayBreak"] is None
     assert snapshot["items"][1]["breakType"] == "SUSPENDED"
     assert snapshot["items"][1]["changePercent"] is None
+
+
+def test_generate_snapshot_rejects_low_target_date_data_coverage():
+    reset_database()
+    seed_two_board_candidate_then_break()
+    add_stock("600006", "覆盖缺失样本")
+    add_bar("600006", date(2026, 4, 29), 10.0)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/limit-up-breaks/snapshots",
+        json={"tradeDate": "2026-04-30", "threshold": 2, "provider": "AkShare"},
+    )
+    body = response.json()
+
+    assert response.status_code == 422
+    assert body["error"]["code"] == "DATA_COVERAGE_TOO_LOW"
+    assert "行情覆盖不足" in body["error"]["message"]
 
 
 def test_generate_snapshot_uses_warehouse_instruments_without_sqlite_stocks():
@@ -233,28 +277,119 @@ def test_snapshot_can_be_queried_by_date():
     assert len(snapshot["items"]) == 2
 
 
-def test_snapshot_query_falls_back_to_latest_available_trade_date():
+def test_default_snapshot_query_reads_existing_snapshot_without_generation():
+    reset_database()
+    seed_two_board_candidate_then_break()
+    add_trading_calendar(
+        [
+            (date(2026, 4, 29), True),
+            (date(2026, 4, 30), True),
+        ]
+    )
+    client = TestClient(app)
+    created = assert_ok(client.post("/api/v1/limit-up-breaks/snapshots", json={"tradeDate": "2026-04-30"}))
+
+    snapshot = assert_ok(client.get("/api/v1/limit-up-breaks/snapshots/default/latest?threshold=2&provider=AkShare"))
+
+    assert snapshot["id"] == created["id"]
+    assert snapshot["tradeDate"] == "2026-04-30"
+    assert snapshot["breakCount"] == 2
+    assert len(snapshot["items"]) == 2
+
+
+CN_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def test_snapshot_query_does_not_fall_back_to_latest_available_trade_date():
     reset_database()
     seed_two_board_candidate_then_break()
     client = TestClient(app)
     assert_ok(client.post("/api/v1/limit-up-breaks/snapshots", json={"tradeDate": "2026-04-30", "provider": "akshare"}))
 
-    snapshot = assert_ok(client.get("/api/v1/limit-up-breaks/snapshots/2026-05-05?threshold=2&provider=AkShare"))
+    response = client.get("/api/v1/limit-up-breaks/snapshots/2026-05-05?threshold=2&provider=AkShare")
+    body = response.json()
 
-    assert snapshot["tradeDate"] == "2026-04-30"
-    assert snapshot["breakCount"] == 2
-    assert [item["code"] for item in snapshot["items"]] == ["600001", "600003"]
+    assert response.status_code == 404
+    assert body["error"]["code"] == "LIMIT_UP_BREAK_SNAPSHOT_NOT_FOUND"
 
 
-def test_snapshot_generation_falls_back_to_latest_available_trade_date():
+def test_snapshot_generation_does_not_fall_back_to_latest_available_trade_date():
     reset_database()
     seed_two_board_candidate_then_break()
     client = TestClient(app)
 
-    snapshot = assert_ok(client.post("/api/v1/limit-up-breaks/snapshots", json={"tradeDate": "2026-05-05", "provider": "AkShare"}))
+    response = client.post("/api/v1/limit-up-breaks/snapshots", json={"tradeDate": "2026-05-05", "provider": "AkShare"})
+    body = response.json()
 
-    assert snapshot["tradeDate"] == "2026-04-30"
-    assert snapshot["breakCount"] == 2
+    assert response.status_code == 422
+    assert body["error"]["code"] == "NO_PRICE_DATA"
+
+
+def test_default_target_uses_previous_open_day_before_18_on_trading_day():
+    reset_database()
+    add_trading_calendar(
+        [
+            (date(2026, 5, 7), True),
+            (date(2026, 5, 8), True),
+        ]
+    )
+
+    target = resolve_default_limit_up_break_trade_date(now=datetime(2026, 5, 8, 17, 59, tzinfo=CN_TZ))
+
+    assert target == date(2026, 5, 7)
+
+
+def test_default_target_uses_today_after_18_on_trading_day():
+    reset_database()
+    add_trading_calendar(
+        [
+            (date(2026, 5, 7), True),
+            (date(2026, 5, 8), True),
+        ]
+    )
+
+    target = resolve_default_limit_up_break_trade_date(now=datetime(2026, 5, 8, 18, 0, tzinfo=CN_TZ))
+
+    assert target == date(2026, 5, 8)
+
+
+def test_default_target_uses_previous_open_day_on_weekend():
+    reset_database()
+    add_trading_calendar(
+        [
+            (date(2026, 5, 8), True),
+            (date(2026, 5, 9), False),
+            (date(2026, 5, 10), False),
+        ]
+    )
+
+    target = resolve_default_limit_up_break_trade_date(now=datetime(2026, 5, 10, 10, 0, tzinfo=CN_TZ))
+
+    assert target == date(2026, 5, 8)
+
+
+def test_default_snapshot_does_not_fall_back_when_latest_target_data_is_incomplete():
+    reset_database()
+    seed_two_board_candidate_then_break()
+    add_full_coverage_anchor_stocks()
+    for code in ["600006", "600007", "600008", "600009", "600010"]:
+        add_bar(code, date(2026, 5, 8), 10.5)
+    add_trading_calendar(
+        [
+            (date(2026, 4, 30), True),
+            (date(2026, 5, 8), True),
+            (date(2026, 5, 9), False),
+            (date(2026, 5, 10), False),
+        ]
+    )
+    client = TestClient(app)
+
+    response = client.post("/api/v1/limit-up-breaks/snapshots", json={"provider": "AkShare"})
+    body = response.json()
+
+    assert response.status_code == 422
+    assert body["error"]["code"] == "DATA_COVERAGE_TOO_LOW"
+    assert body["error"]["details"]["tradeDate"] == "2026-05-08"
 
 
 def test_adjusted_price_bars_are_not_used_for_break_snapshots():

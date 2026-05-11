@@ -36,6 +36,20 @@ class FakeAkShare:
             ]
         )
 
+    def stock_zh_a_hist_tx(self, **kwargs):
+        return pd.DataFrame(
+            [
+                {
+                    "date": date(2026, 4, 30),
+                    "open": 100,
+                    "close": 108,
+                    "high": 110,
+                    "low": 99,
+                    "amount": 1000,
+                }
+            ]
+        )
+
     def index_zh_a_hist(self, **kwargs):
         return pd.DataFrame(
             [
@@ -112,6 +126,31 @@ def test_akshare_data_layer_provider_converts_daily_bars(monkeypatch):
     assert qfq_bars[0].price_adjustment == "qfq"
     assert hfq_bars[0].price_adjustment == "hfq"
     assert fake.stock_adjustments == ["", "qfq", "hfq"]
+
+
+def test_akshare_daily_bars_fallback_to_tencent_history(monkeypatch):
+    class EastmoneyFailAkShare(FakeAkShare):
+        def __init__(self):
+            super().__init__()
+            self.tx_symbols: list[str] = []
+
+        def stock_zh_a_hist(self, **kwargs):
+            raise ConnectionError("eastmoney disconnected")
+
+        def stock_zh_a_hist_tx(self, **kwargs):
+            self.tx_symbols.append(kwargs["symbol"])
+            return super().stock_zh_a_hist_tx(**kwargs)
+
+    fake = EastmoneyFailAkShare()
+    monkeypatch.setattr("backend.app.data_layer.providers.akshare._akshare", lambda: fake)
+
+    bars = AkShareDataLayerProvider().get_daily_bars("600519", date(2026, 4, 1), date(2026, 4, 30), price_adjustment="raw")
+
+    assert len(bars) == 1
+    assert bars[0].code == "600519"
+    assert bars[0].volume == 1000
+    assert bars[0].amount == 10800000
+    assert fake.tx_symbols == ["sh600519"]
 
 
 def test_akshare_data_layer_provider_converts_calendar_and_index_bars(monkeypatch):

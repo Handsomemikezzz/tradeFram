@@ -47,6 +47,42 @@ class FakeDataLayerProvider:
         ]
 
 
+class FakeBulkDataLayerProvider(FakeDataLayerProvider):
+    def __init__(self):
+        super().__init__()
+        self.bulk_calls: list[str] = []
+
+    def get_daily_bars_bulk(self, target_date: date, *, price_adjustment: str = "raw"):
+        self.bulk_calls.append(f"{target_date.isoformat()}:{price_adjustment}")
+        return [
+            DataLayerDailyBar("600519", "600519.SH", "SH", target_date, 10, 11, 9, 10.5, 100, 1000, price_adjustment),
+            DataLayerDailyBar("000001", "000001.SZ", "SZ", target_date, 11, 12, 10, 11.5, 200, 2000, price_adjustment),
+        ]
+
+
+class FakeWeekendBulkDataLayerProvider(FakeBulkDataLayerProvider):
+    def get_trading_calendar(self, start_date: date, end_date: date):
+        return [
+            DataLayerTradingDay(date(2026, 5, 6), "CN_A", True),
+            DataLayerTradingDay(date(2026, 5, 7), "CN_A", True),
+            DataLayerTradingDay(date(2026, 5, 8), "CN_A", True),
+            DataLayerTradingDay(date(2026, 5, 9), "CN_A", False),
+            DataLayerTradingDay(date(2026, 5, 10), "CN_A", False),
+        ]
+
+    def get_daily_bars(self, code: str, start_date: date, end_date: date, *, price_adjustment: str = "raw"):
+        self.daily_calls.append(f"{code}:{price_adjustment}")
+        return [
+            DataLayerDailyBar(code, f"{code}.SH" if code.startswith("6") else f"{code}.SZ", "SH" if code.startswith("6") else "SZ", end_date, 10, 11, 9, 10.5, 100, 1000, price_adjustment),
+        ]
+
+
+class MostlyFailingDataLayerProvider(FakeDataLayerProvider):
+    def get_daily_bars(self, code: str, start_date: date, end_date: date, *, price_adjustment: str = "raw"):
+        self.daily_calls.append(f"{code}:{price_adjustment}")
+        raise ConnectionError("upstream disconnected")
+
+
 def test_init_history_data_writes_limited_raw_warehouse_metadata_and_report(tmp_path):
     provider = FakeDataLayerProvider()
     result = init_history_data(
@@ -64,7 +100,7 @@ def test_init_history_data_writes_limited_raw_warehouse_metadata_and_report(tmp_
     assert result.success_items >= 4
     assert result.failed_items == 0
     assert result.report_path.exists()
-    assert provider.daily_calls == ["600519:raw", "600519:qfq", "600519:hfq"]
+    assert provider.daily_calls == ["600519:raw"]
     assert (tmp_path / "data" / "raw" / "fake" / "daily_bars").exists()
     assert (tmp_path / "data" / "warehouse" / "daily_bars").exists()
     instruments = ParquetStore().read_dataset(tmp_path / "data" / "warehouse" / "instruments")
@@ -103,7 +139,67 @@ def test_sync_daily_data_writes_recent_window_without_business_cache(tmp_path):
     assert result.status == "success"
     daily = ParquetStore().read_dataset(tmp_path / "data" / "warehouse" / "daily_bars")
     assert set(daily["code"]) == {"600519", "000001"}
-    assert set(daily["price_adjustment"]) == {"raw", "qfq", "hfq"}
+    assert set(daily["price_adjustment"]) == {"raw"}
+
+
+def test_sync_daily_data_uses_stable_per_stock_history_even_when_bulk_is_available(tmp_path):
+    provider = FakeBulkDataLayerProvider()
+
+    result = sync_daily_data(
+        SyncOptions(
+            data_root=tmp_path / "data",
+            provider_name="fake",
+            end_date=date(2026, 4, 30),
+            lookback_days=20,
+        ),
+        provider=provider,
+    )
+
+    assert result.status == "success"
+    assert provider.bulk_calls == []
+    assert provider.daily_calls == ["600519:raw", "000001:raw"]
+    daily = ParquetStore().read_dataset(tmp_path / "data" / "warehouse" / "daily_bars")
+    assert set(daily["code"]) == {"600519", "000001"}
+
+
+def test_sync_daily_data_on_weekend_backfills_latest_open_trading_day(tmp_path):
+    provider = FakeWeekendBulkDataLayerProvider()
+
+    result = sync_daily_data(
+        SyncOptions(
+            data_root=tmp_path / "data",
+            provider_name="fake",
+            end_date=date(2026, 5, 10),
+            lookback_days=3,
+        ),
+        provider=provider,
+    )
+
+    assert result.status == "success"
+    assert provider.bulk_calls == []
+    assert provider.daily_calls == ["600519:raw", "000001:raw"]
+    daily = ParquetStore().read_dataset(tmp_path / "data" / "warehouse" / "daily_bars")
+    assert set(str(value) for value in daily["trade_date"]) == {"2026-05-08"}
+
+
+def test_sync_daily_data_circuit_breaks_when_failure_rate_is_too_high(tmp_path):
+    provider = MostlyFailingDataLayerProvider()
+
+    result = sync_daily_data(
+        SyncOptions(
+            data_root=tmp_path / "data",
+            provider_name="fake",
+            end_date=date(2026, 4, 30),
+            lookback_days=20,
+            circuit_breaker_min_items=1,
+            circuit_breaker_failure_rate=0.5,
+        ),
+        provider=provider,
+    )
+
+    assert result.status == "failed"
+    assert result.failed_items >= 1
+    assert provider.daily_calls == ["600519:raw"]
 
 
 def test_merge_warehouse_reads_only_matching_partition(tmp_path):

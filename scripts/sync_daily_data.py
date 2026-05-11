@@ -31,6 +31,8 @@ def main() -> int:
             resume_run_id=args.resume_run_id,
             retry_failed=args.retry_failed,
             dry_run=args.dry_run,
+            circuit_breaker_min_items=args.circuit_breaker_min_items,
+            circuit_breaker_failure_rate=args.circuit_breaker_failure_rate,
         )
     )
     print(f"{result.status} run_id={result.run_id} success={result.success_items} failed={result.failed_items} report={result.report_path}")
@@ -51,6 +53,8 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--resume-run-id")
     parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--circuit-breaker-min-items", type=int, default=30)
+    parser.add_argument("--circuit-breaker-failure-rate", type=float, default=0.8)
 
 
 def _parse_codes(raw: str | None) -> list[str] | None:

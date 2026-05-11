@@ -52,13 +52,17 @@ class AkShareDataLayerProvider(DataLayerProvider):
         ak = _akshare()
         normalized = str(code).zfill(6)
         adjustment = _normalize_price_adjustment(price_adjustment)
-        frame = ak.stock_zh_a_hist(
-            symbol=normalized,
-            period="daily",
-            start_date=start_date.strftime("%Y%m%d"),
-            end_date=end_date.strftime("%Y%m%d"),
-            adjust="" if adjustment == "raw" else adjustment,
-        )
+        try:
+            frame = ak.stock_zh_a_hist(
+                symbol=normalized,
+                period="daily",
+                start_date=start_date.strftime("%Y%m%d"),
+                end_date=end_date.strftime("%Y%m%d"),
+                adjust="" if adjustment == "raw" else adjustment,
+                timeout=30,
+            )
+        except Exception:
+            frame = self._daily_bars_fallback_frame(ak, normalized, start_date, end_date, adjustment)
         if frame is None or frame.empty:
             return []
         exchange = _exchange_for(normalized)
@@ -78,6 +82,65 @@ class AkShareDataLayerProvider(DataLayerProvider):
             )
             for _, row in frame.iterrows()
         ]
+
+    def _daily_bars_fallback_frame(self, ak, code: str, start_date: date, end_date: date, adjustment: str):
+        if adjustment != "raw":
+            raise RuntimeError(f"fallback daily bars only supports raw adjustment: {adjustment}")
+        frame = ak.stock_zh_a_hist_tx(
+            symbol=_prefixed_stock_symbol(code),
+            start_date=start_date.strftime("%Y%m%d"),
+            end_date=end_date.strftime("%Y%m%d"),
+            adjust="",
+            timeout=30,
+        )
+        if frame is None or frame.empty:
+            return frame
+        frame = frame.copy()
+        frame["日期"] = frame["date"]
+        frame["开盘"] = frame["open"]
+        frame["收盘"] = frame["close"]
+        frame["最高"] = frame["high"]
+        frame["最低"] = frame["low"]
+        frame["成交量"] = frame["amount"].fillna(0)
+        frame["成交额"] = frame["amount"].fillna(0) * frame["close"].fillna(0) * 100
+        return frame
+
+    def get_daily_bars_bulk(self, target_date: date, *, price_adjustment: str = "raw") -> list[DataLayerDailyBar] | None:
+        adjustment = _normalize_price_adjustment(price_adjustment)
+        if adjustment != "raw":
+            return None
+        ak = _akshare()
+        frame = ak.stock_zh_a_spot_em()
+        if frame is None or frame.empty:
+            return []
+        bars: list[DataLayerDailyBar] = []
+        for _, row in frame.iterrows():
+            code = str(_pick(row, ["代码", "code"], "")).zfill(6)
+            if not code or not code.isdigit() or len(code) != 6:
+                continue
+            close = _to_float(_pick(row, ["最新价", "close"], 0))
+            open_price = _to_float(_pick(row, ["今开", "open"], close))
+            high = _to_float(_pick(row, ["最高", "high"], max(open_price, close)))
+            low = _to_float(_pick(row, ["最低", "low"], min(open_price, close)))
+            if close <= 0 or high < low:
+                continue
+            exchange = _exchange_for(code)
+            bars.append(
+                DataLayerDailyBar(
+                    code=code,
+                    symbol=f"{code}.{exchange}",
+                    exchange=exchange,
+                    trade_date=target_date,
+                    open=open_price,
+                    high=high,
+                    low=low,
+                    close=close,
+                    volume=int(_to_float(_pick(row, ["成交量", "volume"], 0))),
+                    amount=_to_float(_pick(row, ["成交额", "amount"], 0)),
+                    price_adjustment="raw",
+                )
+            )
+        return bars
 
     def get_index_daily_bars(self, index_code: str, start_date: date, end_date: date) -> list[DataLayerIndexDailyBar]:
         ak = _akshare()
@@ -187,6 +250,10 @@ def _prefixed_index_symbol(index_code: str) -> str:
     code, _, exchange = index_code.partition(".")
     prefix = "sz" if exchange.upper() == "SZ" or code.startswith("399") else "sh"
     return f"{prefix}{code}"
+
+
+def _prefixed_stock_symbol(code: str) -> str:
+    return f"{'sh' if code.startswith('6') else 'sz'}{code}"
 
 
 def _pick(row, keys: list[str], default: Any = None) -> Any:

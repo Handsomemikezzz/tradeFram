@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.waytofree.daily-sync</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chuhaonan/codeMIni-hn/2026/trade/waytofree/.venv/bin/python</string>
+		<string>/Users/chuhaonan/codeMIni-hn/2026/trade/waytofree/scripts/sync_today_if_trading_day.py</string>
+		<string>--provider</string>
+		<string>akshare</string>
+		<string>--data-root</string>
+		<string>data</string>
+		<string>--lookback-days</string>
+		<string>5</string>
+		<string>--sleep</string>
+		<string>0.8</string>
+		<string>--max-retries</string>
+		<string>5</string>
+		<string>--retry-backoff</string>
+		<string>3</string>
+		<string>--circuit-breaker-min-items</string>
+		<string>5000</string>
+		<string>--circuit-breaker-failure-rate</string>
+		<string>1.0</string>
+	</array>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chuhaonan/codeMIni-hn/2026/trade/waytofree/logs/daily-sync.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chuhaonan/codeMIni-hn/2026/trade/waytofree/logs/daily-sync.out.log</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>18</integer>
+		<key>Minute</key>
+		<integer>0</integer>
+	</dict>
+	<key>WorkingDirectory</key>
+	<string>/Users/chuhaonan/codeMIni-hn/2026/trade/waytofree</string>
+</dict>
+</plist>

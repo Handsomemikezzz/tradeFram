@@ -53,6 +53,10 @@ class WarehouseMarketDataStore:
     def instruments_path(self) -> Path:
         return self.data_root / "warehouse" / "instruments"
 
+    @property
+    def trading_calendar_path(self) -> Path:
+        return self.data_root / "warehouse" / "trading_calendar"
+
     def list_instruments(self) -> list[WarehouseInstrument]:
         if not self.instruments_path.exists():
             return []
@@ -98,6 +102,35 @@ class WarehouseMarketDataStore:
         bars = self.get_daily_bars(code, limit=1, price_adjustment=price_adjustment)
         return bars[-1] if bars else None
 
+    def daily_bars_frame(
+        self,
+        *,
+        codes: set[str] | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        price_adjustment: str = "raw",
+        columns: list[str] | None = None,
+    ) -> pd.DataFrame:
+        required_columns = set(columns or [])
+        required_columns.update({"code", "trade_date", "price_adjustment"})
+        filters = _daily_bar_filters(start_date=start_date, end_date=end_date, price_adjustment=price_adjustment)
+        frame = self._read_daily_bars(columns=sorted(required_columns) if columns is not None else None, filters=filters)
+        if frame.empty:
+            return frame
+        frame = self._filter_adjustment(frame, price_adjustment)
+        if frame.empty:
+            return frame
+        if start_date is not None:
+            frame = frame[frame["trade_date"] >= start_date]
+        if end_date is not None:
+            frame = frame[frame["trade_date"] <= end_date]
+        if codes is not None:
+            normalized_codes = {str(code).zfill(6) for code in codes}
+            frame = frame.copy()
+            frame["code"] = frame["code"].astype(str).str.zfill(6)
+            frame = frame[frame["code"].isin(normalized_codes)]
+        return frame
+
     def trade_dates(self, *, end_date: date | None = None, price_adjustment: str = "raw") -> list[date]:
         frame = self._read_daily_bars()
         if frame.empty:
@@ -110,6 +143,45 @@ class WarehouseMarketDataStore:
     def latest_trade_date(self, *, price_adjustment: str = "raw") -> date | None:
         dates = self.trade_dates(price_adjustment=price_adjustment)
         return dates[-1] if dates else None
+
+    def open_trade_dates(self, *, end_date: date | None = None) -> list[date]:
+        if not self.trading_calendar_path.exists():
+            return self.trade_dates(end_date=end_date)
+        frame = self.store.read_dataset(self.trading_calendar_path)
+        if frame.empty:
+            return self.trade_dates(end_date=end_date)
+        frame["trade_date"] = pd.to_datetime(frame["trade_date"]).dt.date
+        if "is_open" in frame.columns:
+            frame = frame[frame["is_open"].astype(bool)]
+        if end_date is not None:
+            frame = frame[frame["trade_date"] <= end_date]
+        dates = sorted(frame["trade_date"].dropna().unique().tolist())
+        return dates or self.trade_dates(end_date=end_date)
+
+    def daily_bar_counts_by_date(
+        self,
+        *,
+        codes: set[str] | None = None,
+        end_date: date | None = None,
+        price_adjustment: str = "raw",
+    ) -> dict[date, int]:
+        frame = self._read_daily_bars()
+        if frame.empty:
+            return {}
+        frame = self._filter_adjustment(frame, price_adjustment)
+        if frame.empty:
+            return {}
+        if end_date is not None:
+            frame = frame[frame["trade_date"] <= end_date]
+        if codes is not None:
+            normalized_codes = {str(code).zfill(6) for code in codes}
+            frame = frame.copy()
+            frame["code"] = frame["code"].astype(str).str.zfill(6)
+            frame = frame[frame["code"].isin(normalized_codes)]
+        if frame.empty:
+            return {}
+        counts = frame.groupby("trade_date")["code"].nunique()
+        return {day: int(count) for day, count in counts.items()}
 
     def count_daily_bars(self, code: str, *, price_adjustment: str = "raw") -> int:
         return len(self._daily_frame(code=code, price_adjustment=price_adjustment))
@@ -138,10 +210,10 @@ class WarehouseMarketDataStore:
             frame = frame[frame["trade_date"] <= end_date]
         return frame
 
-    def _read_daily_bars(self) -> pd.DataFrame:
+    def _read_daily_bars(self, *, columns: list[str] | None = None, filters=None) -> pd.DataFrame:
         if not self.daily_bars_path.exists():
             return pd.DataFrame()
-        frame = self.store.read_dataset(self.daily_bars_path)
+        frame = self.store.read_dataset(self.daily_bars_path, columns=columns, filters=filters)
         if not frame.empty and "trade_date" in frame.columns:
             frame["trade_date"] = pd.to_datetime(frame["trade_date"]).dt.date
         return frame
@@ -157,6 +229,20 @@ class WarehouseMarketDataStore:
         if requested == "raw":
             return frame[values.isin(RAW_PRICE_ADJUSTMENTS)]
         return frame[values == requested]
+
+
+def _daily_bar_filters(*, start_date: date | None, end_date: date | None, price_adjustment: str):
+    filters = []
+    if start_date is not None:
+        filters.append(("trade_date", ">=", start_date))
+    if end_date is not None:
+        filters.append(("trade_date", "<=", end_date))
+    requested = price_adjustment.lower()
+    if requested == "raw":
+        filters.append(("price_adjustment", "in", sorted(RAW_PRICE_ADJUSTMENTS)))
+    else:
+        filters.append(("price_adjustment", "==", requested))
+    return filters or None
 
 
 def _bar_from_row(row) -> WarehousePriceBar:

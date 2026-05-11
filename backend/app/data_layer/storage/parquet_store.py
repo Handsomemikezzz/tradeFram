@@ -27,8 +27,8 @@ class ParquetStore:
         else:
             frame.to_parquet(path / "part.parquet", index=False)
 
-    def read_dataset(self, path: Path) -> pd.DataFrame:
-        frame = pd.read_parquet(path)
+    def read_dataset(self, path: Path, *, columns: list[str] | None = None, filters=None) -> pd.DataFrame:
+        frame = pd.read_parquet(path, columns=columns, filters=filters)
         for column in ["code", "symbol", "exchange", "index_code", "price_adjustment"]:
             if column in frame.columns:
                 frame[column] = frame[column].astype("string").astype(str)
