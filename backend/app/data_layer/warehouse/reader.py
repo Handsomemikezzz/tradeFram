@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pandas as pd
+from pyarrow.lib import ArrowNotImplementedError
 
 from ..storage.parquet_store import ParquetStore
 
@@ -196,7 +197,17 @@ class WarehouseMarketDataStore:
     ) -> pd.DataFrame:
         normalized = str(code).zfill(6)
         partition = self.daily_bars_path / f"code={normalized}"
-        frame = self.store.read_dataset(partition) if partition.exists() else self._read_daily_bars()
+        if partition.exists():
+            frame = self.store.read_dataset(partition)
+        else:
+            filters = _daily_bar_filters(start_date=start_date, end_date=end_date, price_adjustment=price_adjustment)
+            code_filter = int(normalized)
+            filters.append(("code", "==", code_filter))
+            try:
+                frame = self._read_daily_bars(filters=filters)
+            except (ArrowNotImplementedError, TypeError, ValueError):
+                filters[-1] = ("code", "==", normalized)
+                frame = self._read_daily_bars(filters=filters)
         if frame.empty:
             return frame
         if "code" not in frame.columns:

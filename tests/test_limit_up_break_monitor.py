@@ -277,6 +277,67 @@ def test_snapshot_can_be_queried_by_date():
     assert len(snapshot["items"]) == 2
 
 
+def test_post_break_bars_returns_t0_to_t5_raw_closes_and_daily_changes():
+    reset_database()
+    seed_two_board_candidate_then_break()
+    forward_days = [
+        (date(2026, 5, 6), 13.2),
+        (date(2026, 5, 7), 13.4),
+        (date(2026, 5, 8), 13.1),
+        (date(2026, 5, 11), 13.8),
+        (date(2026, 5, 12), 14.0),
+        (date(2026, 5, 13), 14.5),
+    ]
+    for trade_date, close in forward_days:
+        add_bar("600001", trade_date, close)
+    add_bar("600001", date(2026, 5, 6), 88.0, adjustment="qfq")
+    add_trading_calendar(
+        [
+            (date(2026, 4, 29), True),
+            (date(2026, 4, 30), True),
+            (date(2026, 5, 1), False),
+            (date(2026, 5, 6), True),
+            (date(2026, 5, 7), True),
+            (date(2026, 5, 8), True),
+            (date(2026, 5, 11), True),
+            (date(2026, 5, 12), True),
+            (date(2026, 5, 13), True),
+        ]
+    )
+    client = TestClient(app)
+
+    payload = assert_ok(client.get("/api/v1/limit-up-breaks/stocks/600001/post-break-bars?breakDate=2026-04-30&maxForwardDays=5&adjustment=none"))
+
+    assert payload["breakDate"] == "2026-04-30"
+    assert payload["priceAdjustment"] == "none"
+    assert [bar["tradeDate"] for bar in payload["bars"]] == ["2026-04-30", "2026-05-06", "2026-05-07", "2026-05-08", "2026-05-11", "2026-05-12"]
+    assert [bar["dayOffset"] for bar in payload["bars"]] == [0, 1, 2, 3, 4, 5]
+    assert [bar["close"] for bar in payload["bars"]] == [13.5, 13.2, 13.4, 13.1, 13.8, 14.0]
+    assert payload["bars"][0]["changePercent"] == 1.43
+    assert payload["bars"][1]["changePercent"] == -2.22
+
+
+def test_post_break_bars_skips_missing_suspended_days_without_padding():
+    reset_database()
+    seed_two_board_candidate_then_break()
+    add_bar("600001", date(2026, 5, 7), 13.4)
+    add_trading_calendar(
+        [
+            (date(2026, 4, 29), True),
+            (date(2026, 4, 30), True),
+            (date(2026, 5, 6), True),
+            (date(2026, 5, 7), True),
+        ]
+    )
+    client = TestClient(app)
+
+    payload = assert_ok(client.get("/api/v1/limit-up-breaks/stocks/600001/post-break-bars?breakDate=2026-04-30&maxForwardDays=2"))
+
+    assert [bar["tradeDate"] for bar in payload["bars"]] == ["2026-04-30", "2026-05-07"]
+    assert [bar["dayOffset"] for bar in payload["bars"]] == [0, 2]
+    assert payload["bars"][1]["changePercent"] is None
+
+
 def test_default_snapshot_query_reads_existing_snapshot_without_generation():
     reset_database()
     seed_two_board_candidate_then_break()

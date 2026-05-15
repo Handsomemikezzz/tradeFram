@@ -4,7 +4,8 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, CalendarDays, Database, RefreshCw, RotateCcw, TrendingDown } from 'lucide-react';
+import { Activity, CalendarDays, ChevronDown, ChevronRight, Database, RefreshCw, RotateCcw, TrendingDown } from 'lucide-react';
+import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { ApiClientError, formatDateTime, limitUpBreakApi, LimitUpBreakItemResponse, LimitUpBreakSnapshotResponse } from '@/services/api';
+import { ApiClientError, formatDateTime, limitUpBreakApi, LimitUpBreakItemResponse, LimitUpBreakSnapshotResponse, PostBreakBarsResponse } from '@/services/api';
 
 const DEFAULT_PROVIDER = 'AkShare';
 
@@ -37,6 +38,11 @@ function formatAmount(amount: number | null): string {
   return amount.toLocaleString();
 }
 
+function formatPercent(value: number | null): string {
+  if (value === null) return '-';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
 function sortItems(items: LimitUpBreakItemResponse[]): LimitUpBreakItemResponse[] {
   return [...items].sort((a, b) => {
     if (b.previousLimitUpHeight !== a.previousLimitUpHeight) return b.previousLimitUpHeight - a.previousLimitUpHeight;
@@ -58,6 +64,10 @@ export default function LimitUpBreakMonitor() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedCode, setExpandedCode] = useState<string | null>(null);
+  const [trendCache, setTrendCache] = useState<Record<string, PostBreakBarsResponse>>({});
+  const [trendLoading, setTrendLoading] = useState<Record<string, boolean>>({});
+  const [trendErrors, setTrendErrors] = useState<Record<string, string>>({});
 
   const items = useMemo(() => sortItems(snapshot?.items || []), [snapshot]);
 
@@ -71,6 +81,9 @@ export default function LimitUpBreakMonitor() {
         data = await limitUpBreakApi.getDefaultSnapshot({ threshold, provider: DEFAULT_PROVIDER });
       }
       setSnapshot(data);
+      setExpandedCode(null);
+      setTrendCache({});
+      setTrendErrors({});
       if (data.tradeDate !== tradeDate) setTradeDate(data.tradeDate);
       setError(null);
     } catch (err) {
@@ -90,6 +103,9 @@ export default function LimitUpBreakMonitor() {
     try {
       const data = await limitUpBreakApi.createSnapshot({ tradeDate: tradeDate || undefined, threshold, provider: DEFAULT_PROVIDER });
       setSnapshot(data);
+      setExpandedCode(null);
+      setTrendCache({});
+      setTrendErrors({});
       if (data.tradeDate !== tradeDate) setTradeDate(data.tradeDate);
       setError(null);
       toast.success('断板快照已更新', {
@@ -101,6 +117,34 @@ export default function LimitUpBreakMonitor() {
       toast.error(message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const toggleTrend = async (item: LimitUpBreakItemResponse) => {
+    if (!snapshot) return;
+    if (expandedCode === item.code) {
+      setExpandedCode(null);
+      return;
+    }
+    setExpandedCode(item.code);
+    if (trendCache[item.code] || trendLoading[item.code]) return;
+    setTrendLoading((current) => ({ ...current, [item.code]: true }));
+    setTrendErrors((current) => {
+      const next = { ...current };
+      delete next[item.code];
+      return next;
+    });
+    try {
+      const data = await limitUpBreakApi.getPostBreakBars(item.code, {
+        breakDate: snapshot.tradeDate,
+        maxForwardDays: 5,
+        adjustment: 'none',
+      });
+      setTrendCache((current) => ({ ...current, [item.code]: data }));
+    } catch (err) {
+      setTrendErrors((current) => ({ ...current, [item.code]: err instanceof Error ? err.message : '走势数据加载失败' }));
+    } finally {
+      setTrendLoading((current) => ({ ...current, [item.code]: false }));
     }
   };
 
@@ -161,6 +205,7 @@ export default function LimitUpBreakMonitor() {
             <TableHeader>
               <TableRow className="bg-gray-50 hover:bg-gray-50 border-b border-gray-100">
                 <TableHead className="px-4 py-2 text-[10px] font-bold uppercase text-gray-400 italic font-serif h-auto">股票</TableHead>
+                <TableHead className="px-4 py-2 text-[10px] font-bold uppercase text-gray-400 italic font-serif h-auto text-center">走势</TableHead>
                 <TableHead className="px-4 py-2 text-[10px] font-bold uppercase text-gray-400 italic font-serif h-auto text-center">断板类型</TableHead>
                 <TableHead className="px-4 py-2 text-[10px] font-bold uppercase text-gray-400 italic font-serif h-auto text-right">断板前高度</TableHead>
                 <TableHead className="px-4 py-2 text-[10px] font-bold uppercase text-gray-400 italic font-serif h-auto text-right">当日涨跌幅</TableHead>
@@ -169,37 +214,112 @@ export default function LimitUpBreakMonitor() {
               </TableRow>
             </TableHeader>
             <TableBody className="text-xs font-mono">
-              {(loading || generating) && <TableRow><TableCell colSpan={6} className="px-4 py-8 text-center text-gray-400">正在处理断板快照...</TableCell></TableRow>}
-              {!loading && !generating && error && <TableRow><TableCell colSpan={6} className="px-4 py-8 text-center text-red-500">{error}</TableCell></TableRow>}
-              {!loading && !generating && !error && !snapshot && <TableRow><TableCell colSpan={6} className="px-4 py-8 text-center text-gray-400">当前日期暂无快照，可点击生成快照。</TableCell></TableRow>}
-              {!loading && !generating && !error && snapshot && items.length === 0 && <TableRow><TableCell colSpan={6} className="px-4 py-8 text-center text-gray-400">当日候选连板股未出现断板。</TableCell></TableRow>}
+              {(loading || generating) && <TableRow><TableCell colSpan={7} className="px-4 py-8 text-center text-gray-400">正在处理断板快照...</TableCell></TableRow>}
+              {!loading && !generating && error && <TableRow><TableCell colSpan={7} className="px-4 py-8 text-center text-red-500">{error}</TableCell></TableRow>}
+              {!loading && !generating && !error && !snapshot && <TableRow><TableCell colSpan={7} className="px-4 py-8 text-center text-gray-400">当前日期暂无快照，可点击生成快照。</TableCell></TableRow>}
+              {!loading && !generating && !error && snapshot && items.length === 0 && <TableRow><TableCell colSpan={7} className="px-4 py-8 text-center text-gray-400">当日候选连板股未出现断板。</TableCell></TableRow>}
               {!loading && !generating && !error && items.map((item) => (
-                <TableRow key={item.id} className="hover:bg-blue-50 transition-colors border-gray-50">
-                  <TableCell className="px-4 py-3 border-b border-gray-50">
-                    <div className="flex flex-col">
-                      <span className="text-[11px] font-bold text-gray-900">{item.name}</span>
-                      <span className="text-[10px] text-gray-400 font-mono tracking-tight">{item.code}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="px-4 py-3 border-b border-gray-50 text-center">
-                    <Badge className={cn("text-[10px] px-2 py-0.5 rounded border font-bold", item.breakType === 'SUSPENDED' ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-red-50 text-red-700 border-red-100")}>{breakTypeLabel(item.breakType)}</Badge>
-                  </TableCell>
-                  <TableCell className="px-4 py-3 border-b border-gray-50 text-right">
-                    <span className="text-[11px] font-bold text-gray-900 tabular-nums">{item.previousLimitUpHeight} 板</span>
-                  </TableCell>
-                  <TableCell className="px-4 py-3 border-b border-gray-50 text-right">
-                    <span className={cn("text-[11px] font-bold tabular-nums", item.changePercent === null ? "text-gray-400" : item.changePercent >= 0 ? "text-red-600" : "text-green-600")}>
-                      {item.changePercent === null ? '-' : `${item.changePercent >= 0 ? '+' : ''}${item.changePercent.toFixed(2)}%`}
-                    </span>
-                  </TableCell>
-                  <TableCell className="px-4 py-3 border-b border-gray-50 text-right text-[11px] font-bold text-gray-700 tabular-nums">{formatAmount(item.amount)}</TableCell>
-                  <TableCell className="px-4 py-3 border-b border-gray-50 text-center text-[11px] text-gray-400">{item.intradayBreak === null ? '留空' : item.intradayBreak ? '是' : '否'}</TableCell>
-                </TableRow>
+                <React.Fragment key={item.id}>
+                  <TableRow className="hover:bg-blue-50 transition-colors border-gray-50 cursor-pointer" aria-expanded={expandedCode === item.code} onClick={() => toggleTrend(item)}>
+                    <TableCell className="px-4 py-3 border-b border-gray-50">
+                      <div className="flex flex-col">
+                        <span className="text-[11px] font-bold text-gray-900">{item.name}</span>
+                        <span className="text-[10px] text-gray-400 font-mono tracking-tight">{item.code}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 border-b border-gray-50 text-center">
+                      <Button type="button" variant="outline" size="sm" className="h-7 w-7 p-0 border-gray-200 bg-white" aria-label={expandedCode === item.code ? '收起断板后走势' : '展开断板后走势'}>
+                        {expandedCode === item.code ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      </Button>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 border-b border-gray-50 text-center">
+                      <Badge className={cn("text-[10px] px-2 py-0.5 rounded border font-bold", item.breakType === 'SUSPENDED' ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-red-50 text-red-700 border-red-100")}>{breakTypeLabel(item.breakType)}</Badge>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 border-b border-gray-50 text-right">
+                      <span className="text-[11px] font-bold text-gray-900 tabular-nums">{item.previousLimitUpHeight} 板</span>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 border-b border-gray-50 text-right">
+                      <span className={cn("text-[11px] font-bold tabular-nums", item.changePercent === null ? "text-gray-400" : item.changePercent >= 0 ? "text-red-600" : "text-green-600")}>
+                        {formatPercent(item.changePercent)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="px-4 py-3 border-b border-gray-50 text-right text-[11px] font-bold text-gray-700 tabular-nums">{formatAmount(item.amount)}</TableCell>
+                    <TableCell className="px-4 py-3 border-b border-gray-50 text-center text-[11px] text-gray-400">{item.intradayBreak === null ? '留空' : item.intradayBreak ? '是' : '否'}</TableCell>
+                  </TableRow>
+                  {expandedCode === item.code && (
+                    <TableRow className="bg-gray-50/60 hover:bg-gray-50/60 border-gray-100">
+                      <TableCell colSpan={7} className="px-4 py-4 whitespace-normal">
+                        <PostBreakTrendPanel data={trendCache[item.code]} loading={Boolean(trendLoading[item.code])} error={trendErrors[item.code]} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function PostBreakTrendPanel({ data, loading, error }: { data?: PostBreakBarsResponse; loading: boolean; error?: string }) {
+  if (loading) {
+    return <div className="h-40 flex items-center justify-center text-[11px] text-gray-400">正在加载断板后走势...</div>;
+  }
+  if (error) {
+    return <div className="h-40 flex items-center justify-center text-[11px] text-red-500">{error}</div>;
+  }
+  if (!data || data.bars.length === 0) {
+    return <div className="h-40 flex items-center justify-center text-[11px] text-gray-400">暂无可展示的后续日 K 数据</div>;
+  }
+
+  const chartData = data.bars.map((bar) => ({
+    ...bar,
+    label: bar.dayOffset === 0 ? 'T0' : `T+${bar.dayOffset}`,
+    dateLabel: bar.tradeDate.slice(5),
+  }));
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-4">
+      <div className="h-44 min-w-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 2, left: 0 }}>
+            <CartesianGrid stroke="#EEF0F2" strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} />
+            <YAxis dataKey="close" domain={['dataMin', 'dataMax']} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#6B7280' }} width={42} />
+            <Tooltip content={<PostBreakTooltip />} />
+            <ReferenceLine x="T0" stroke="#DC2626" strokeDasharray="4 4" label={{ value: '断板日', fill: '#DC2626', fontSize: 10, position: 'insideTopLeft' }} />
+            <Line type="monotone" dataKey="close" stroke="#2563EB" strokeWidth={2} dot={{ r: 3, strokeWidth: 2, fill: '#FFFFFF' }} activeDot={{ r: 4 }} connectNulls={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-2 gap-2 content-start">
+        {chartData.map((bar) => (
+          <div key={bar.tradeDate} className={cn("border rounded-md px-2.5 py-2 bg-white", bar.dayOffset === 0 ? "border-red-200" : "border-gray-200")}>
+            <div className="flex items-center justify-between gap-2">
+              <span className={cn("text-[10px] font-bold", bar.dayOffset === 0 ? "text-red-600" : "text-gray-500")}>{bar.label}</span>
+              <span className="text-[10px] text-gray-400">{bar.dateLabel}</span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="text-[12px] font-bold text-gray-900 tabular-nums">{bar.close.toFixed(2)}</span>
+              <span className={cn("text-[11px] font-bold tabular-nums", bar.changePercent === null ? "text-gray-400" : bar.changePercent >= 0 ? "text-red-600" : "text-green-600")}>{formatPercent(bar.changePercent)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PostBreakTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { label: string; tradeDate: string; close: number; changePercent: number | null } }> }) {
+  if (!active || !payload?.length) return null;
+  const bar = payload[0].payload;
+  return (
+    <div className="rounded-md border border-gray-200 bg-white px-3 py-2 shadow-sm">
+      <div className="text-[10px] font-bold text-gray-500">{bar.label} / {bar.tradeDate}</div>
+      <div className="mt-1 text-[11px] text-gray-700">收盘价 <span className="font-bold tabular-nums">{bar.close.toFixed(2)}</span></div>
+      <div className={cn("text-[11px] font-bold tabular-nums", bar.changePercent === null ? "text-gray-400" : bar.changePercent >= 0 ? "text-red-600" : "text-green-600")}>涨跌幅 {formatPercent(bar.changePercent)}</div>
     </div>
   );
 }

@@ -22,6 +22,14 @@ class _CachedPriceBar:
     amount: float
 
 
+@dataclass(frozen=True)
+class PostBreakBar:
+    trade_date: date
+    close: float
+    change_percent: float | None
+    day_offset: int
+
+
 class LimitUpBreakError(RuntimeError):
     def __init__(self, code: str, message: str, *, status_code: int = 400, details: dict | None = None):
         super().__init__(message)
@@ -129,6 +137,51 @@ def get_default_limit_up_break_snapshot(db: Session, *, threshold: int = 2, prov
     if target_date is None:
         return None, None
     return get_limit_up_break_snapshot(db, target_date, threshold=threshold, provider=provider), target_date
+
+
+def get_post_break_bars(
+    code: str,
+    break_date: date,
+    *,
+    max_forward_days: int = 5,
+    price_adjustment: str = "raw",
+) -> list[PostBreakBar]:
+    if max_forward_days < 0:
+        raise LimitUpBreakError("INVALID_FORWARD_DAYS", "后续交易日数量不能小于 0")
+    if price_adjustment.lower() not in {"raw", "none"}:
+        raise LimitUpBreakError("INVALID_PRICE_ADJUSTMENT", "断板后走势仅支持未复权日 K", status_code=422)
+
+    normalized_code = str(code).zfill(6)
+    store = WarehouseMarketDataStore()
+    trade_dates = _post_break_trade_dates(store, break_date, max_forward_days)
+    if not trade_dates:
+        raise LimitUpBreakError("NO_PRICE_DATA", f"{break_date.isoformat()} 起无可用于走势展示的交易日", status_code=404)
+
+    previous_date = _previous_trade_date(store.open_trade_dates(end_date=break_date), break_date)
+    load_start = previous_date or trade_dates[0]
+    raw_bars = store.get_daily_bars(
+        normalized_code,
+        start_date=load_start,
+        end_date=trade_dates[-1],
+        price_adjustment="raw",
+    )
+    bars_by_date = {bar.trade_date: bar for bar in raw_bars}
+    result: list[PostBreakBar] = []
+    for offset, trade_date in enumerate(trade_dates):
+        bar = bars_by_date.get(trade_date)
+        if bar is None:
+            continue
+        previous_bar = bars_by_date.get(trade_dates[offset - 1] if offset > 0 else previous_date)
+        change_percent = round(((bar.close - previous_bar.close) / previous_bar.close) * 100, 2) if previous_bar and previous_bar.close else None
+        result.append(
+            PostBreakBar(
+                trade_date=trade_date,
+                close=round(bar.close, 2),
+                change_percent=change_percent,
+                day_offset=offset,
+            )
+        )
+    return result
 
 
 def _upsert_snapshot(db: Session, trade_date: date, previous_trade_date: date, threshold: int, provider: str) -> m.LimitUpBreakSnapshot:
@@ -313,6 +366,15 @@ def _resolve_snapshot_trade_date(requested: date | None, provider: str) -> date 
 def _previous_trade_date(trade_dates: list[date], target_date: date) -> date | None:
     previous = [day for day in trade_dates if day < target_date]
     return previous[-1] if previous else None
+
+
+def _post_break_trade_dates(store: WarehouseMarketDataStore, break_date: date, max_forward_days: int) -> list[date]:
+    # Use trading calendar only. Do not call store.trade_dates() — it scans the full daily_bars warehouse.
+    trade_dates = store.open_trade_dates()
+    if break_date not in trade_dates:
+        trade_dates = sorted({*trade_dates, break_date})
+    start_index = trade_dates.index(break_date)
+    return trade_dates[start_index : start_index + max_forward_days + 1]
 
 
 def _limit_up_height_ending_on(db: Session, code: str, target_date: date, trade_dates: list[date], provider: str) -> int:

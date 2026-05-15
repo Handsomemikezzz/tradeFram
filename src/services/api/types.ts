@@ -314,6 +314,20 @@ export interface LimitUpBreakSnapshotResponse {
   items: LimitUpBreakItemResponse[];
 }
 
+export interface PostBreakBarResponse {
+  tradeDate: string;
+  close: number;
+  changePercent: number | null;
+  dayOffset: number;
+}
+
+export interface PostBreakBarsResponse {
+  code: string;
+  breakDate: string;
+  priceAdjustment: string;
+  bars: PostBreakBarResponse[];
+}
+
 export type DataHealthStatus = 'READY' | 'STALE' | 'INCOMPLETE' | 'MISSING' | string;
 
 export interface DataHealthOverviewResponse {
