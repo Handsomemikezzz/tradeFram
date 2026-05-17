@@ -328,6 +328,95 @@ export interface PostBreakBarsResponse {
   bars: PostBreakBarResponse[];
 }
 
+export type ReviewEntryType = 'TRADE_ACTION' | 'OBSERVATION_DECISION';
+export type ReviewPlanStatus = 'PLANNED' | 'UNPLANNED' | 'INTRADAY_ADJUSTMENT' | 'OBSERVED_ONLY';
+
+export interface ReviewEntryResponse {
+  id: string;
+  entryType: ReviewEntryType;
+  actionType: string;
+  tradeDate: string;
+  code: string | null;
+  name: string | null;
+  sectorTags: string[];
+  positionContext: string | null;
+  planStatus: ReviewPlanStatus;
+  emotionTags: string[];
+  problemTags: string[];
+  reasonText: string;
+  reflectionText: string;
+  conclusionText: string;
+  nextActionText: string;
+  disciplineScore: number;
+  outcomeText: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReviewEntryRequest {
+  entryType: ReviewEntryType;
+  actionType: string;
+  tradeDate: string;
+  code?: string | null;
+  name?: string | null;
+  sectorTags: string[];
+  positionContext?: string | null;
+  planStatus: ReviewPlanStatus;
+  emotionTags: string[];
+  problemTags: string[];
+  reasonText: string;
+  reflectionText: string;
+  conclusionText: string;
+  nextActionText: string;
+  disciplineScore: number;
+  outcomeText?: string | null;
+}
+
+export interface ReviewStatsResponse {
+  startDate: string;
+  endDate: string;
+  totalCount: number;
+  tradeActionCount: number;
+  observationDecisionCount: number;
+  planStatusCounts: Record<string, number>;
+  emotionTagCounts: Record<string, number>;
+  problemTagCounts: Record<string, number>;
+  sectorTagCounts: Record<string, number>;
+  codeCounts: Record<string, number>;
+  averageDisciplineScore: number | null;
+  lowDisciplineCount: number;
+  lowDisciplineThreshold: number;
+  planDeviationRatio: number;
+}
+
+export interface WeeklyReviewRequest {
+  summaryText: string;
+  repeatedMistakesText: string;
+  effectiveActionsText: string;
+  emotionPatternText: string;
+  nextWeekFocusText: string;
+  ruleCandidatesText: string;
+  linkedEntryIds: string[];
+}
+
+export interface WeeklyReviewResponse extends WeeklyReviewRequest {
+  id: string;
+  weekStart: string;
+  weekEnd: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WeeklyWorkbenchResponse {
+  weekStart: string;
+  weekEnd: string;
+  stats: ReviewStatsResponse;
+  entries: ReviewEntryResponse[];
+  planDeviationEntries: ReviewEntryResponse[];
+  lowDisciplineEntries: ReviewEntryResponse[];
+  weeklyReview: WeeklyReviewResponse | null;
+}
+
 export type DataHealthStatus = 'READY' | 'STALE' | 'INCOMPLETE' | 'MISSING' | string;
 
 export interface DataHealthOverviewResponse {

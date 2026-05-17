@@ -87,6 +87,7 @@ async function request<T>(method: string, path: string, options: { query?: Query
 export const apiClient = {
   get: <T>(path: string, query?: QueryParams) => request<T>('GET', path, { query }),
   post: <T>(path: string, body?: unknown, query?: QueryParams) => request<T>('POST', path, { body, query }),
+  put: <T>(path: string, body?: unknown, query?: QueryParams) => request<T>('PUT', path, { body, query }),
   patch: <T>(path: string, body?: unknown, query?: QueryParams) => request<T>('PATCH', path, { body, query }),
   delete: <T>(path: string, query?: QueryParams) => request<T>('DELETE', path, { query }),
 };
