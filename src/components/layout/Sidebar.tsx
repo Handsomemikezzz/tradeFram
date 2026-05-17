@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
+  BookOpenCheck,
   LayoutDashboard,
   Search,
   TrendingDown,
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { icon: LayoutDashboard, label: '首页概览', path: '/' },
   { icon: Search, label: '股票研究', path: '/research' },
   { icon: TrendingDown, label: '连板断板', path: '/limit-up-breaks' },
+  { icon: BookOpenCheck, label: '交易复盘', path: '/reviews' },
   { icon: Database, label: '数据健康', path: '/data-health' },
   { icon: MonitorPlay, label: '交易控制台', path: '/trading' },
   { icon: History, label: '持仓与日志', path: '/history' },

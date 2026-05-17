@@ -13,6 +13,7 @@ import LimitUpBreakMonitor from './pages/LimitUpBreakMonitor';
 import DataHealth from './pages/DataHealth';
 import TradingConsole from './pages/TradingConsole';
 import HistoryPage from './pages/History';
+import Reviews from './pages/Reviews';
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/research" element={<Research />} />
             <Route path="/research/:code" element={<ReportDetail />} />
             <Route path="/limit-up-breaks" element={<LimitUpBreakMonitor />} />
+            <Route path="/reviews" element={<Reviews />} />
             <Route path="/data-health" element={<DataHealth />} />
             <Route path="/trading" element={<TradingConsole />} />
             <Route path="/history" element={<HistoryPage />} />
