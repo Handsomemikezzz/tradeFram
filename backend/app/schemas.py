@@ -3,7 +3,13 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+TRADE_ACTIONS = {"BUY", "SELL", "ADD", "REDUCE", "CLEAR", "DO_T"}
+OBSERVATION_ACTIONS = {"WANTED_BUY", "WANTED_SELL", "CANCELLED_ORDER", "HELD_BACK", "PLAN_OBSERVE"}
+PLAN_STATUSES = {"PLANNED", "UNPLANNED", "INTRADAY_ADJUSTMENT", "OBSERVED_ONLY"}
+MAX_TAGS_PER_FIELD = 10
 
 
 class ApiError(BaseModel):
@@ -91,3 +97,86 @@ class Page(BaseModel):
     hasMore: bool
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class ReviewEntryCreate(BaseModel):
+    entryType: Literal["TRADE_ACTION", "OBSERVATION_DECISION"]
+    actionType: str
+    tradeDate: date
+    code: str | None = Field(default=None, min_length=6, max_length=6)
+    name: str | None = Field(default=None, max_length=64)
+    sectorTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+    positionContext: str | None = None
+    planStatus: str
+    emotionTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+    problemTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+    reasonText: str = Field(..., min_length=1)
+    reflectionText: str = Field(..., min_length=1)
+    conclusionText: str = Field(..., min_length=1)
+    nextActionText: str = Field(..., min_length=1)
+    disciplineScore: int = Field(..., ge=1, le=5)
+    outcomeText: str | None = None
+
+    @field_validator("tradeDate")
+    @classmethod
+    def trade_date_not_future(cls, value: date) -> date:
+        if value > date.today():
+            raise ValueError("tradeDate cannot be in the future")
+        return value
+
+    @field_validator("planStatus")
+    @classmethod
+    def plan_status_valid(cls, value: str) -> str:
+        if value not in PLAN_STATUSES:
+            raise ValueError("planStatus is invalid")
+        return value
+
+    @model_validator(mode="after")
+    def action_type_valid(self):
+        allowed = TRADE_ACTIONS if self.entryType == "TRADE_ACTION" else OBSERVATION_ACTIONS
+        if self.actionType not in allowed:
+            raise ValueError("actionType is invalid for entryType")
+        return self
+
+
+class ReviewEntryUpdate(BaseModel):
+    entryType: Literal["TRADE_ACTION", "OBSERVATION_DECISION"] | None = None
+    actionType: str | None = None
+    tradeDate: date | None = None
+    code: str | None = Field(default=None, min_length=6, max_length=6)
+    name: str | None = Field(default=None, max_length=64)
+    sectorTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+    positionContext: str | None = None
+    planStatus: str | None = None
+    emotionTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+    problemTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+    reasonText: str | None = Field(default=None, min_length=1)
+    reflectionText: str | None = Field(default=None, min_length=1)
+    conclusionText: str | None = Field(default=None, min_length=1)
+    nextActionText: str | None = Field(default=None, min_length=1)
+    disciplineScore: int | None = Field(default=None, ge=1, le=5)
+    outcomeText: str | None = None
+
+    @field_validator("tradeDate")
+    @classmethod
+    def update_trade_date_not_future(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("tradeDate cannot be in the future")
+        return value
+
+    @field_validator("planStatus")
+    @classmethod
+    def update_plan_status_valid(cls, value: str | None) -> str | None:
+        if value is not None and value not in PLAN_STATUSES:
+            raise ValueError("planStatus is invalid")
+        return value
+
+
+class WeeklyReviewUpdate(BaseModel):
+    summaryText: str = ""
+    repeatedMistakesText: str = ""
+    effectiveActionsText: str = ""
+    emotionPatternText: str = ""
+    nextWeekFocusText: str = ""
+    ruleCandidatesText: str = ""
+    linkedEntryIds: list[str] = Field(default_factory=list)

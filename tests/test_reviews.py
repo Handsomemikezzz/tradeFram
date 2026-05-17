@@ -66,3 +66,63 @@ def test_review_models_can_persist_json_tags():
         assert saved.sector_tags == ["白酒"]
         assert saved.emotion_tags == ["冷静"]
         assert db.get(m.WeeklyReview, "wr_test").linked_entry_ids == ["rv_test"]
+
+
+def test_create_review_entry_validates_type_and_stores_payload():
+    reset_database()
+    client = TestClient(app)
+
+    data = assert_ok(
+        client.post(
+            "/api/v1/reviews/entries",
+            json={
+                "entryType": "TRADE_ACTION",
+                "actionType": "BUY",
+                "tradeDate": "2026-05-11",
+                "code": "600519",
+                "name": "贵州茅台",
+                "sectorTags": ["白酒"],
+                "positionContext": "LIGHT",
+                "planStatus": "PLANNED",
+                "emotionTags": ["冷静"],
+                "problemTags": ["无明显问题"],
+                "reasonText": "计划内轻仓试错",
+                "reflectionText": "执行符合计划",
+                "conclusionText": "计划内轻仓试错",
+                "nextActionText": "只做计划内交易",
+                "disciplineScore": 5,
+                "outcomeText": "待验证",
+            },
+        )
+    )
+
+    assert data["id"].startswith("rv_")
+    assert data["entryType"] == "TRADE_ACTION"
+    assert data["actionType"] == "BUY"
+    assert data["sectorTags"] == ["白酒"]
+    assert data["disciplineScore"] == 5
+
+
+def test_review_entry_rejects_invalid_action_for_entry_type():
+    reset_database()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/reviews/entries",
+        json={
+            "entryType": "OBSERVATION_DECISION",
+            "actionType": "BUY",
+            "tradeDate": "2026-05-11",
+            "planStatus": "OBSERVED_ONLY",
+            "emotionTags": [],
+            "problemTags": [],
+            "reasonText": "想买",
+            "reflectionText": "没买",
+            "conclusionText": "观察",
+            "nextActionText": "继续观察",
+            "disciplineScore": 3,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
