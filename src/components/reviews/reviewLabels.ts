@@ -36,3 +36,29 @@ export const positionContextLabel: Record<string, string> = {
 export const emotionPresets = ['怕踏空', '急躁', '犹豫', '贪便宜', '想回本', '冷静', '防守'];
 export const problemPresets = ['策略问题', '判断问题', '执行问题', '情绪问题', '仓位问题', '无明显问题'];
 export const sectorPresets = ['商业航天', '半导体', '有色', '风电', '电力', '白酒', '银行'];
+
+export const stockReviewStatusLabel: Record<string, string> = {
+  OPEN: '进行中',
+  CLOSED: '已结束',
+};
+
+export const stockReviewInitialActionLabel: Record<string, string> = {
+  BUY: '买入建仓',
+  WATCH: '开始关注',
+  PLAN_BUY: '计划买入',
+};
+
+export const stockReviewEventTypeLabel: Record<string, string> = {
+  HOLD: '继续持有',
+  ADD: '加仓',
+  REDUCE: '减仓',
+  SELL: '卖出',
+  PLAN_CHANGE: '计划变化',
+  EMOTION: '情绪波动',
+  OBSERVATION: '观察记录',
+};
+
+export const followedPlanLabel: Record<string, string> = {
+  true: '按计划执行',
+  false: '偏离计划',
+};

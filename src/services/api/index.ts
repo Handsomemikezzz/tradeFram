@@ -11,3 +11,4 @@ export * from './dataApi';
 export * from './dataHealthApi';
 export * from './limitUpBreakApi';
 export * from './reviewApi';
+export * from './reviewCardApi';

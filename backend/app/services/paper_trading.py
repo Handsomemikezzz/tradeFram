@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -40,6 +41,7 @@ DEFAULT_RISK_PARAMS = {
     "slippageRate": 0.0005,
     "requireTradingTime": False,
 }
+CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -480,7 +482,10 @@ def _is_data_stale(bar: WarehousePriceBar, risk_params: dict) -> bool:
 
 
 def _is_trading_time(db: Session) -> bool:
-    today = datetime.now(UTC).date()
+    now = datetime.now(CHINA_TZ)
+    if now.weekday() >= 5:
+        return False
+    today = now.date()
     day = db.query(m.TradingCalendar).filter(m.TradingCalendar.trade_date == today, m.TradingCalendar.is_open.is_(True)).first()
     return day is not None
 

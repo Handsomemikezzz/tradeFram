@@ -417,6 +417,103 @@ export interface WeeklyWorkbenchResponse {
   weeklyReview: WeeklyReviewResponse | null;
 }
 
+export type StockReviewCardStatus = 'OPEN' | 'CLOSED';
+export type StockReviewInitialAction = 'BUY' | 'WATCH' | 'PLAN_BUY';
+export type StockReviewEventType = 'HOLD' | 'ADD' | 'REDUCE' | 'SELL' | 'PLAN_CHANGE' | 'EMOTION' | 'OBSERVATION';
+
+export interface StockReviewEventResponse {
+  id: string;
+  cardId: string;
+  eventDate: string;
+  eventType: StockReviewEventType;
+  title: string;
+  reasonText: string;
+  positionSnapshot: string | null;
+  deviatedFromPlan: boolean;
+  emotionTags: string[];
+  problemTags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StockReviewCardResponse {
+  id: string;
+  status: StockReviewCardStatus;
+  code: string | null;
+  name: string | null;
+  sectorTags: string[];
+  startDate: string;
+  endDate: string | null;
+  initialAction: StockReviewInitialAction;
+  initialPositionContext: string | null;
+  initialPlanStatus: ReviewPlanStatus;
+  initialReasonText: string;
+  expectedMoveText: string;
+  originalPlanText: string;
+  initialEmotionTags: string[];
+  problemTags: string[];
+  sellReasonText: string | null;
+  pnlText: string | null;
+  followedPlan: boolean | null;
+  disciplineScore: number | null;
+  didWellText: string | null;
+  didWrongText: string | null;
+  reflectionText: string | null;
+  ruleText: string | null;
+  createdAt: string;
+  updatedAt: string;
+  events?: StockReviewEventResponse[];
+}
+
+export interface StockReviewCardRequest {
+  code?: string | null;
+  name?: string | null;
+  sectorTags: string[];
+  startDate: string;
+  initialAction: StockReviewInitialAction;
+  initialPositionContext?: string | null;
+  initialPlanStatus: ReviewPlanStatus;
+  initialReasonText: string;
+  expectedMoveText: string;
+  originalPlanText: string;
+  initialEmotionTags: string[];
+}
+
+export interface StockReviewEventRequest {
+  eventDate: string;
+  eventType: StockReviewEventType;
+  title: string;
+  reasonText: string;
+  positionSnapshot?: string | null;
+  deviatedFromPlan: boolean;
+  emotionTags: string[];
+  problemTags: string[];
+}
+
+export interface StockReviewCardCloseRequest {
+  endDate: string;
+  sellReasonText: string;
+  pnlText: string;
+  followedPlan: boolean;
+  disciplineScore: number;
+  problemTags: string[];
+  didWellText: string;
+  didWrongText: string;
+  reflectionText: string;
+  ruleText: string;
+}
+
+export interface StockReviewCardSummaryResponse {
+  startDate: string;
+  endDate: string;
+  openCount: number;
+  closedCount: number;
+  createdInRangeCount: number;
+  closedInRangeCount: number;
+  lowDisciplineClosedCount: number;
+  lowDisciplineThreshold: number;
+}
+
 export type DataHealthStatus = 'READY' | 'STALE' | 'INCOMPLETE' | 'MISSING' | string;
 
 export interface DataHealthOverviewResponse {

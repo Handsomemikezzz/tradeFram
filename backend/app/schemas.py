@@ -9,7 +9,24 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 TRADE_ACTIONS = {"BUY", "SELL", "ADD", "REDUCE", "CLEAR", "DO_T"}
 OBSERVATION_ACTIONS = {"WANTED_BUY", "WANTED_SELL", "CANCELLED_ORDER", "HELD_BACK", "PLAN_OBSERVE"}
 PLAN_STATUSES = {"PLANNED", "UNPLANNED", "INTRADAY_ADJUSTMENT", "OBSERVED_ONLY"}
+CARD_STATUSES = {"OPEN", "CLOSED"}
+CARD_INITIAL_ACTIONS = {"BUY", "WATCH", "PLAN_BUY"}
+CARD_EVENT_TYPES = {"HOLD", "ADD", "REDUCE", "SELL", "PLAN_CHANGE", "EMOTION", "OBSERVATION"}
 MAX_TAGS_PER_FIELD = 10
+
+
+def _strip_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def _strip_required_text(value: str, field_name: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"{field_name} cannot be blank")
+    return stripped
 
 
 class ApiError(BaseModel):
@@ -180,3 +197,195 @@ class WeeklyReviewUpdate(BaseModel):
     nextWeekFocusText: str = ""
     ruleCandidatesText: str = ""
     linkedEntryIds: list[str] = Field(default_factory=list)
+
+
+class StockReviewCardCreate(BaseModel):
+    code: str | None = Field(default=None, min_length=6, max_length=6)
+    name: str | None = Field(default=None, max_length=64)
+    sectorTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+    startDate: date
+    initialAction: str
+    initialPositionContext: str | None = None
+    initialPlanStatus: str
+    initialReasonText: str = Field(..., min_length=1)
+    expectedMoveText: str = ""
+    originalPlanText: str = ""
+    initialEmotionTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+
+    @field_validator("code", "name", mode="before")
+    @classmethod
+    def strip_identity_text(cls, value: str | None) -> str | None:
+        return _strip_optional_text(value)
+
+    @field_validator("startDate")
+    @classmethod
+    def start_date_not_future(cls, value: date) -> date:
+        if value > date.today():
+            raise ValueError("startDate cannot be in the future")
+        return value
+
+    @field_validator("initialReasonText")
+    @classmethod
+    def initial_reason_text_not_blank(cls, value: str) -> str:
+        return _strip_required_text(value, "initialReasonText")
+
+    @field_validator("initialAction")
+    @classmethod
+    def initial_action_valid(cls, value: str) -> str:
+        if value not in CARD_INITIAL_ACTIONS:
+            raise ValueError("initialAction is invalid")
+        return value
+
+    @field_validator("initialPlanStatus")
+    @classmethod
+    def initial_plan_status_valid(cls, value: str) -> str:
+        if value not in PLAN_STATUSES:
+            raise ValueError("initialPlanStatus is invalid")
+        return value
+
+    @model_validator(mode="after")
+    def code_or_name_required(self):
+        if not self.code and not self.name:
+            raise ValueError("code or name is required")
+        return self
+
+
+class StockReviewCardUpdate(BaseModel):
+    code: str | None = Field(default=None, min_length=6, max_length=6)
+    name: str | None = Field(default=None, max_length=64)
+    sectorTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+    startDate: date | None = None
+    initialAction: str | None = None
+    initialPositionContext: str | None = None
+    initialPlanStatus: str | None = None
+    initialReasonText: str | None = Field(default=None, min_length=1)
+    expectedMoveText: str | None = None
+    originalPlanText: str | None = None
+    initialEmotionTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+
+    @field_validator("code", "name", mode="before")
+    @classmethod
+    def strip_update_identity_text(cls, value: str | None) -> str | None:
+        return _strip_optional_text(value)
+
+    @field_validator("initialReasonText")
+    @classmethod
+    def update_initial_reason_text_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _strip_required_text(value, "initialReasonText")
+
+    @field_validator("startDate")
+    @classmethod
+    def update_start_date_not_future(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("startDate cannot be in the future")
+        return value
+
+    @field_validator("initialAction")
+    @classmethod
+    def update_initial_action_valid(cls, value: str | None) -> str | None:
+        if value is not None and value not in CARD_INITIAL_ACTIONS:
+            raise ValueError("initialAction is invalid")
+        return value
+
+    @field_validator("initialPlanStatus")
+    @classmethod
+    def update_initial_plan_status_valid(cls, value: str | None) -> str | None:
+        if value is not None and value not in PLAN_STATUSES:
+            raise ValueError("initialPlanStatus is invalid")
+        return value
+
+
+class StockReviewEventCreate(BaseModel):
+    eventDate: date
+    eventType: str
+    title: str = Field(..., min_length=1, max_length=96)
+    reasonText: str = Field(..., min_length=1)
+    positionSnapshot: str | None = Field(default=None, max_length=128)
+    deviatedFromPlan: bool = False
+    emotionTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+    problemTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+
+    @field_validator("title", "reasonText")
+    @classmethod
+    def event_required_text_not_blank(cls, value: str) -> str:
+        return _strip_required_text(value, "event text")
+
+    @field_validator("eventDate")
+    @classmethod
+    def event_date_not_future(cls, value: date) -> date:
+        if value > date.today():
+            raise ValueError("eventDate cannot be in the future")
+        return value
+
+    @field_validator("eventType")
+    @classmethod
+    def event_type_valid(cls, value: str) -> str:
+        if value not in CARD_EVENT_TYPES:
+            raise ValueError("eventType is invalid")
+        return value
+
+
+class StockReviewEventUpdate(BaseModel):
+    eventDate: date | None = None
+    eventType: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=96)
+    reasonText: str | None = Field(default=None, min_length=1)
+    positionSnapshot: str | None = Field(default=None, max_length=128)
+    deviatedFromPlan: bool | None = None
+    emotionTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+    problemTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+
+    @field_validator("title", "reasonText")
+    @classmethod
+    def update_event_required_text_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _strip_required_text(value, "event text")
+
+    @field_validator("eventDate")
+    @classmethod
+    def update_event_date_not_future(cls, value: date | None) -> date | None:
+        if value is not None and value > date.today():
+            raise ValueError("eventDate cannot be in the future")
+        return value
+
+    @field_validator("eventType")
+    @classmethod
+    def update_event_type_valid(cls, value: str | None) -> str | None:
+        if value is not None and value not in CARD_EVENT_TYPES:
+            raise ValueError("eventType is invalid")
+        return value
+
+
+class StockReviewCardClose(BaseModel):
+    endDate: date
+    sellReasonText: str = Field(..., min_length=1)
+    pnlText: str = Field(..., min_length=1)
+    followedPlan: bool
+    disciplineScore: int = Field(..., ge=1, le=5)
+    problemTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+    didWellText: str = Field(..., min_length=1)
+    didWrongText: str = Field(..., min_length=1)
+    reflectionText: str = Field(..., min_length=1)
+    ruleText: str = Field(..., min_length=1)
+
+    @field_validator(
+        "sellReasonText",
+        "pnlText",
+        "didWellText",
+        "didWrongText",
+        "reflectionText",
+        "ruleText",
+    )
+    @classmethod
+    def close_required_text_not_blank(cls, value: str) -> str:
+        return _strip_required_text(value, "close text")
+
+    @field_validator("endDate")
+    @classmethod
+    def end_date_not_future(cls, value: date) -> date:
+        if value > date.today():
+            raise ValueError("endDate cannot be in the future")
+        return value

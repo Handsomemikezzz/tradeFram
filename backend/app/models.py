@@ -246,6 +246,66 @@ class WeeklyReview(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
 
 
+class StockReviewCard(Base):
+    __tablename__ = "stock_review_cards"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="OPEN", index=True)
+    code: Mapped[str | None] = mapped_column(String(6), index=True)
+    name: Mapped[str | None] = mapped_column(String(64))
+    sector_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    end_date: Mapped[date | None] = mapped_column(Date, index=True)
+    initial_action: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    initial_position_context: Mapped[str | None] = mapped_column(String(32))
+    initial_plan_status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    initial_reason_text: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_move_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    original_plan_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    initial_emotion_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    problem_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    sell_reason_text: Mapped[str | None] = mapped_column(Text)
+    pnl_text: Mapped[str | None] = mapped_column(Text)
+    followed_plan: Mapped[bool | None] = mapped_column(Boolean)
+    discipline_score: Mapped[int | None] = mapped_column(Integer)
+    did_well_text: Mapped[str | None] = mapped_column(Text)
+    did_wrong_text: Mapped[str | None] = mapped_column(Text)
+    reflection_text: Mapped[str | None] = mapped_column(Text)
+    rule_text: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    events: Mapped[list["StockReviewEvent"]] = relationship(
+        "StockReviewEvent",
+        back_populates="card",
+        cascade="all, delete-orphan",
+        order_by="StockReviewEvent.event_date.asc(), StockReviewEvent.created_at.asc()",
+    )
+
+
+class StockReviewEvent(Base):
+    __tablename__ = "stock_review_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    card_id: Mapped[str] = mapped_column(
+        ForeignKey("stock_review_cards.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(96), nullable=False)
+    reason_text: Mapped[str] = mapped_column(Text, nullable=False)
+    position_snapshot: Mapped[str | None] = mapped_column(String(128))
+    deviated_from_plan: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    emotion_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    problem_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    card: Mapped[StockReviewCard] = relationship("StockReviewCard", back_populates="events")
+
+
 class PaperTradingEngineState(Base):
     __tablename__ = "paper_trading_engine_state"
 

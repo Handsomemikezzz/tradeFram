@@ -3,11 +3,20 @@ from __future__ import annotations
 from collections import Counter
 from datetime import date, timedelta
 
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
 from .. import models as m
-from ..schemas import ReviewEntryCreate, ReviewEntryUpdate, WeeklyReviewUpdate
+from ..schemas import (
+    ReviewEntryCreate,
+    ReviewEntryUpdate,
+    StockReviewCardClose,
+    StockReviewCardCreate,
+    StockReviewCardUpdate,
+    StockReviewEventCreate,
+    StockReviewEventUpdate,
+    WeeklyReviewUpdate,
+)
 from ..utils import api_error, new_id
 
 LOW_DISCIPLINE_SCORE_THRESHOLD = 2
@@ -135,6 +144,214 @@ def _contains_all(values: list[str], required: list[str] | None) -> bool:
         return True
     value_set = set(values)
     return all(item in value_set for item in required)
+
+
+def create_stock_review_card(db: Session, payload: StockReviewCardCreate) -> m.StockReviewCard:
+    card = m.StockReviewCard(
+        id=new_id("src"),
+        status="OPEN",
+        code=payload.code,
+        name=payload.name,
+        sector_tags=payload.sectorTags,
+        start_date=payload.startDate,
+        initial_action=payload.initialAction,
+        initial_position_context=payload.initialPositionContext,
+        initial_plan_status=payload.initialPlanStatus,
+        initial_reason_text=payload.initialReasonText,
+        expected_move_text=payload.expectedMoveText,
+        original_plan_text=payload.originalPlanText,
+        initial_emotion_tags=payload.initialEmotionTags,
+    )
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def get_stock_review_card_or_404(db: Session, card_id: str) -> m.StockReviewCard:
+    card = db.get(m.StockReviewCard, card_id)
+    if card is None:
+        raise api_error(404, "REVIEW_CARD_NOT_FOUND", f"标的复盘卡片 {card_id} 不存在")
+    return card
+
+
+def list_stock_review_cards(
+    db: Session,
+    *,
+    status: str | None = None,
+    keyword: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    plan_status: str | None = None,
+    problem_tags: list[str] | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[m.StockReviewCard], int]:
+    query = db.query(m.StockReviewCard)
+    if status and status != "ALL":
+        query = query.filter(m.StockReviewCard.status == status)
+    if keyword:
+        like = f"%{keyword}%"
+        query = query.filter(or_(m.StockReviewCard.code.like(like), m.StockReviewCard.name.like(like)))
+    if start_date:
+        query = query.filter(m.StockReviewCard.start_date >= start_date)
+    if end_date:
+        query = query.filter(m.StockReviewCard.start_date <= end_date)
+    if plan_status:
+        query = query.filter(m.StockReviewCard.initial_plan_status == plan_status)
+
+    all_items = query.order_by(desc(m.StockReviewCard.start_date), desc(m.StockReviewCard.created_at)).all()
+    filtered = [item for item in all_items if _contains_all(item.problem_tags or [], problem_tags)]
+    total = len(filtered)
+    start = (page - 1) * page_size
+    return filtered[start : start + page_size], total
+
+
+def update_stock_review_card(db: Session, card_id: str, payload: StockReviewCardUpdate) -> m.StockReviewCard:
+    card = get_stock_review_card_or_404(db, card_id)
+    data = payload.model_dump(exclude_unset=True)
+    field_map = {
+        "sectorTags": "sector_tags",
+        "startDate": "start_date",
+        "initialAction": "initial_action",
+        "initialPositionContext": "initial_position_context",
+        "initialPlanStatus": "initial_plan_status",
+        "initialReasonText": "initial_reason_text",
+        "expectedMoveText": "expected_move_text",
+        "originalPlanText": "original_plan_text",
+        "initialEmotionTags": "initial_emotion_tags",
+    }
+    for key, value in data.items():
+        setattr(card, field_map.get(key, key), value)
+    card.updated_at = m.now_utc()
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def delete_stock_review_card(db: Session, card_id: str) -> None:
+    card = get_stock_review_card_or_404(db, card_id)
+    db.delete(card)
+    db.commit()
+
+
+def create_stock_review_event(db: Session, card_id: str, payload: StockReviewEventCreate) -> m.StockReviewEvent:
+    get_stock_review_card_or_404(db, card_id)
+    event = m.StockReviewEvent(
+        id=new_id("sre"),
+        card_id=card_id,
+        event_date=payload.eventDate,
+        event_type=payload.eventType,
+        title=payload.title,
+        reason_text=payload.reasonText,
+        position_snapshot=payload.positionSnapshot,
+        deviated_from_plan=payload.deviatedFromPlan,
+        emotion_tags=payload.emotionTags,
+        problem_tags=payload.problemTags,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def get_stock_review_event_or_404(db: Session, card_id: str, event_id: str) -> m.StockReviewEvent:
+    event = (
+        db.query(m.StockReviewEvent)
+        .filter(m.StockReviewEvent.card_id == card_id, m.StockReviewEvent.id == event_id)
+        .first()
+    )
+    if event is None:
+        raise api_error(404, "REVIEW_CARD_EVENT_NOT_FOUND", f"标的复盘事件 {event_id} 不存在")
+    return event
+
+
+def update_stock_review_event(
+    db: Session,
+    card_id: str,
+    event_id: str,
+    payload: StockReviewEventUpdate,
+) -> m.StockReviewEvent:
+    event = get_stock_review_event_or_404(db, card_id, event_id)
+    data = payload.model_dump(exclude_unset=True)
+    field_map = {
+        "eventDate": "event_date",
+        "eventType": "event_type",
+        "reasonText": "reason_text",
+        "positionSnapshot": "position_snapshot",
+        "deviatedFromPlan": "deviated_from_plan",
+        "emotionTags": "emotion_tags",
+        "problemTags": "problem_tags",
+    }
+    for key, value in data.items():
+        setattr(event, field_map.get(key, key), value)
+    event.updated_at = m.now_utc()
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+def delete_stock_review_event(db: Session, card_id: str, event_id: str) -> None:
+    event = get_stock_review_event_or_404(db, card_id, event_id)
+    db.delete(event)
+    db.commit()
+
+
+def close_stock_review_card(db: Session, card_id: str, payload: StockReviewCardClose) -> m.StockReviewCard:
+    card = get_stock_review_card_or_404(db, card_id)
+    if card.status == "CLOSED":
+        raise api_error(400, "REVIEW_CARD_ALREADY_CLOSED", "标的复盘卡片已经结束")
+    if payload.endDate < card.start_date:
+        raise api_error(422, "INVALID_REVIEW_END_DATE", "endDate 不能早于 startDate")
+
+    card.status = "CLOSED"
+    card.end_date = payload.endDate
+    card.sell_reason_text = payload.sellReasonText
+    card.pnl_text = payload.pnlText
+    card.followed_plan = payload.followedPlan
+    card.discipline_score = payload.disciplineScore
+    card.problem_tags = payload.problemTags
+    card.did_well_text = payload.didWellText
+    card.did_wrong_text = payload.didWrongText
+    card.reflection_text = payload.reflectionText
+    card.rule_text = payload.ruleText
+    card.updated_at = m.now_utc()
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def reopen_stock_review_card(db: Session, card_id: str) -> m.StockReviewCard:
+    card = get_stock_review_card_or_404(db, card_id)
+    card.status = "OPEN"
+    card.updated_at = m.now_utc()
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def get_stock_review_card_summary(db: Session, start_date: date, end_date: date) -> dict:
+    cards = db.query(m.StockReviewCard).all()
+    created_in_range = [card for card in cards if start_date <= card.start_date <= end_date]
+    closed_in_range = [
+        card
+        for card in cards
+        if card.status == "CLOSED" and card.end_date is not None and start_date <= card.end_date <= end_date
+    ]
+    return {
+        "startDate": start_date.isoformat(),
+        "endDate": end_date.isoformat(),
+        "openCount": sum(1 for card in cards if card.status == "OPEN"),
+        "closedCount": sum(1 for card in cards if card.status == "CLOSED"),
+        "createdInRangeCount": len(created_in_range),
+        "closedInRangeCount": len(closed_in_range),
+        "lowDisciplineClosedCount": sum(
+            1
+            for card in closed_in_range
+            if card.discipline_score is not None and card.discipline_score <= LOW_DISCIPLINE_SCORE_THRESHOLD
+        ),
+        "lowDisciplineThreshold": LOW_DISCIPLINE_SCORE_THRESHOLD,
+    }
 
 
 def build_review_stats(entries: list[m.ReviewEntry], start_date: date, end_date: date) -> dict:

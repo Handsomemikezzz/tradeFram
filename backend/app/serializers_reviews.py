@@ -3,6 +3,10 @@ from __future__ import annotations
 from . import models as m
 
 
+def _list_payload(value: list | None) -> list:
+    return list(value or [])
+
+
 def review_entry_payload(entry: m.ReviewEntry) -> dict:
     return {
         "id": entry.id,
@@ -11,11 +15,11 @@ def review_entry_payload(entry: m.ReviewEntry) -> dict:
         "tradeDate": entry.trade_date.isoformat(),
         "code": entry.code,
         "name": entry.name,
-        "sectorTags": entry.sector_tags or [],
+        "sectorTags": _list_payload(entry.sector_tags),
         "positionContext": entry.position_context,
         "planStatus": entry.plan_status,
-        "emotionTags": entry.emotion_tags or [],
-        "problemTags": entry.problem_tags or [],
+        "emotionTags": _list_payload(entry.emotion_tags),
+        "problemTags": _list_payload(entry.problem_tags),
         "reasonText": entry.reason_text,
         "reflectionText": entry.reflection_text,
         "conclusionText": entry.conclusion_text,
@@ -40,7 +44,57 @@ def weekly_review_payload(review: m.WeeklyReview | None) -> dict | None:
         "emotionPatternText": review.emotion_pattern_text,
         "nextWeekFocusText": review.next_week_focus_text,
         "ruleCandidatesText": review.rule_candidates_text,
-        "linkedEntryIds": review.linked_entry_ids or [],
+        "linkedEntryIds": _list_payload(review.linked_entry_ids),
         "createdAt": review.created_at.isoformat(),
         "updatedAt": review.updated_at.isoformat(),
     }
+
+
+def stock_review_event_payload(event: m.StockReviewEvent) -> dict:
+    return {
+        "id": event.id,
+        "cardId": event.card_id,
+        "eventDate": event.event_date.isoformat(),
+        "eventType": event.event_type,
+        "title": event.title,
+        "reasonText": event.reason_text,
+        "positionSnapshot": event.position_snapshot,
+        "deviatedFromPlan": event.deviated_from_plan,
+        "emotionTags": _list_payload(event.emotion_tags),
+        "problemTags": _list_payload(event.problem_tags),
+        "createdAt": event.created_at.isoformat(),
+        "updatedAt": event.updated_at.isoformat(),
+    }
+
+
+def stock_review_card_payload(card: m.StockReviewCard, *, include_events: bool = False) -> dict:
+    payload = {
+        "id": card.id,
+        "status": card.status,
+        "code": card.code,
+        "name": card.name,
+        "sectorTags": _list_payload(card.sector_tags),
+        "startDate": card.start_date.isoformat(),
+        "endDate": card.end_date.isoformat() if card.end_date else None,
+        "initialAction": card.initial_action,
+        "initialPositionContext": card.initial_position_context,
+        "initialPlanStatus": card.initial_plan_status,
+        "initialReasonText": card.initial_reason_text,
+        "expectedMoveText": card.expected_move_text,
+        "originalPlanText": card.original_plan_text,
+        "initialEmotionTags": _list_payload(card.initial_emotion_tags),
+        "problemTags": _list_payload(card.problem_tags),
+        "sellReasonText": card.sell_reason_text,
+        "pnlText": card.pnl_text,
+        "followedPlan": card.followed_plan,
+        "disciplineScore": card.discipline_score,
+        "didWellText": card.did_well_text,
+        "didWrongText": card.did_wrong_text,
+        "reflectionText": card.reflection_text,
+        "ruleText": card.rule_text,
+        "createdAt": card.created_at.isoformat(),
+        "updatedAt": card.updated_at.isoformat(),
+    }
+    if include_events:
+        payload["events"] = [stock_review_event_payload(event) for event in card.events]
+    return payload
