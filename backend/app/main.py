@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import audit, data, data_health, limit_up_breaks, monitoring, p0b, portfolio, research, system, trading
+from .routers import audit, data, data_health, limit_up_breaks, monitoring, p0b, portfolio, research, reviews, system, trading
 from .seed import init_db
 from .utils import http_exception_handler, validation_exception_handler
 
@@ -36,5 +36,5 @@ def health():
     return {"ok": True}
 
 
-for router in [system.router, data.router, data_health.router, research.router, monitoring.router, limit_up_breaks.router, trading.router, portfolio.router, audit.router, p0b.router]:
+for router in [system.router, data.router, data_health.router, research.router, reviews.router, monitoring.router, limit_up_breaks.router, trading.router, portfolio.router, audit.router, p0b.router]:
     app.include_router(router, prefix="/api/v1")
