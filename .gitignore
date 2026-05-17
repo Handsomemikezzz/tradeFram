@@ -46,6 +46,7 @@ Thumbs.db
 .vercel/
 .netlify/
 .omx/
+.worktrees/
 
 # Python backend local artifacts
 .venv/
