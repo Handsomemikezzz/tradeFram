@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import desc
 from sqlalchemy.orm import object_session
 
@@ -20,6 +22,9 @@ def stock_payload(stock: m.Stock) -> dict:
 
 
 def quote_payload(stock: m.Stock) -> dict:
+    live = _live_quote_from_warehouse(stock)
+    if live is not None:
+        return live
     return {
         "price": stock.price,
         "change": stock.change,
@@ -28,6 +33,47 @@ def quote_payload(stock: m.Stock) -> dict:
         "amount": stock.amount,
         "updateTime": dt_iso(stock.update_time),
     }
+
+
+def _live_quote_from_warehouse(stock: m.Stock) -> dict | None:
+    store = WarehouseMarketDataStore()
+    latest = store.latest_bar(stock.code)
+    if latest is None:
+        return None
+    previous = store.get_daily_bars(stock.code, end_date=latest.trade_date - timedelta(days=1), limit=1)
+    prev = previous[-1] if previous else None
+    change = round(latest.close - prev.close, 2) if prev else stock.change
+    change_percent = round((change / prev.close) * 100, 2) if prev and prev.close else stock.change_percent
+    return {
+        "price": latest.close,
+        "change": change,
+        "changePercent": change_percent,
+        "volume": latest.volume,
+        "amount": latest.amount,
+        "updateTime": dt_iso(latest.fetched_at),
+    }
+
+
+def _merge_live_price_insights(key_insights: list[str], stock: m.Stock) -> list[str]:
+    store = WarehouseMarketDataStore()
+    bars = store.get_daily_bars(stock.code, limit=20)
+    if not bars:
+        return key_insights
+    latest_close = bars[-1].close
+    ma5 = sum(bar.close for bar in bars[-5:]) / min(len(bars), 5)
+    ma20 = sum(bar.close for bar in bars[-20:]) / min(len(bars), 20)
+    live_line = f"最新收盘价：{latest_close:.2f}；MA5={ma5:.2f}，MA20={ma20:.2f}。"
+    merged: list[str] = []
+    replaced = False
+    for insight in key_insights:
+        if insight.startswith("最新收盘价："):
+            merged.append(live_line)
+            replaced = True
+        else:
+            merged.append(insight)
+    if not replaced:
+        merged.insert(1, live_line)
+    return merged
 
 
 def research_task_payload(task: m.ResearchTask) -> dict:
@@ -90,7 +136,7 @@ def research_report_payload(report: m.ResearchReport) -> dict:
         "financialSnapshot": financial_snapshot_payload(financial) if financial else None,
         "report": {
             "overview": report.overview,
-            "keyInsights": report.key_insights,
+            "keyInsights": _merge_live_price_insights(report.key_insights, stock),
             "worthFurtherResearch": report.worth_further_research,
             "aiConfidence": None,
             "dataCompleteness": report.data_completeness,

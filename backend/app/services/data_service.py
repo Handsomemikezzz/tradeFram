@@ -72,7 +72,7 @@ def fetch_market_dataset(
 ) -> dict[str, Any]:
     code, _, _ = normalize_stock_code(raw_code)
     provider = provider or get_provider()
-    end_date = end_date or date(2026, 4, 25)
+    end_date = end_date or date.today()
     start_date = start_date or (end_date - timedelta(days=120))
 
     cached = _cached_dataset(db, code, provider.name)
