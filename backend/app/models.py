@@ -204,6 +204,48 @@ class LimitUpBreakItem(Base):
     snapshot: Mapped[LimitUpBreakSnapshot] = relationship()
 
 
+class ReviewEntry(Base):
+    __tablename__ = "review_entry"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    entry_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    action_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    code: Mapped[str | None] = mapped_column(String(6), index=True)
+    name: Mapped[str | None] = mapped_column(String(64))
+    sector_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    position_context: Mapped[str | None] = mapped_column(String(32))
+    plan_status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    emotion_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    problem_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    reason_text: Mapped[str] = mapped_column(Text, nullable=False)
+    reflection_text: Mapped[str] = mapped_column(Text, nullable=False)
+    conclusion_text: Mapped[str] = mapped_column(Text, nullable=False)
+    next_action_text: Mapped[str] = mapped_column(Text, nullable=False)
+    discipline_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    outcome_text: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+
+class WeeklyReview(Base):
+    __tablename__ = "weekly_review"
+    __table_args__ = (UniqueConstraint("week_start", name="uq_weekly_review_week_start"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    week_start: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    week_end: Mapped[date] = mapped_column(Date, nullable=False)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    repeated_mistakes_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    effective_actions_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    emotion_pattern_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    next_week_focus_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    rule_candidates_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    linked_entry_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+
 class PaperTradingEngineState(Base):
     __tablename__ = "paper_trading_engine_state"
 
