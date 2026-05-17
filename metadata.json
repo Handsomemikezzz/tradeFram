@@ -1,6 +1,0 @@
-{
-  "name": "A股个人研究与模拟交易工作台",
-  "description": "面向个人开发者的本地化股票研究与模拟交易系统，包含股票研究、策略监控、风控检查及模拟下单闭环。",
-  "requestFramePermissions": [],
-  "majorCapabilities": []
-}
