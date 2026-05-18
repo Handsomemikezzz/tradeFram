@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpenCheck } from 'lucide-react';
+import { BookOpenCheck, ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CardDetail } from '@/components/reviews/CardDetail';
@@ -46,6 +46,7 @@ export default function Reviews() {
   const [selectedCard, setSelectedCard] = useState<StockReviewCardResponse | null>(null);
   const [status, setStatus] = useState<ReviewStatusFilter>('OPEN');
   const [keyword, setKeyword] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
   const [weekStart, setWeekStart] = useState(mondayOf(isoToday()));
   const weekEnd = useMemo(() => sundayOf(weekStart), [weekStart]);
 
@@ -69,6 +70,7 @@ export default function Reviews() {
   const createCard = async (payload: StockReviewCardRequest) => {
     const created = await reviewCardApi.createCard(payload);
     toast.success('标的复盘卡片已建立');
+    setCreateOpen(false);
     setStatus('OPEN');
     await load(created.id, 'OPEN');
   };
@@ -121,16 +123,36 @@ export default function Reviews() {
         </label>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Metric label="进行中" value={summary?.openCount ?? 0} />
-        <Metric label="本周新建" value={summary?.createdInRangeCount ?? 0} />
-        <Metric label="本周结束" value={summary?.closedInRangeCount ?? 0} />
-        <Metric label="低纪律结束" value={summary?.lowDisciplineClosedCount ?? 0} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Metric label="进行中" value={summary?.openCount ?? 0} tone="sky" />
+        <Metric label="本周新建" value={summary?.createdInRangeCount ?? 0} tone="emerald" />
+        <Metric label="本周结束" value={summary?.closedInRangeCount ?? 0} tone="slate" />
+        <Metric label="低纪律结束" value={summary?.lowDisciplineClosedCount ?? 0} tone="amber" />
       </div>
 
-      <Card className="rounded-lg border-gray-200 bg-white">
-        <CardHeader><CardTitle className="text-[10px] uppercase tracking-widest">新建标的复盘</CardTitle></CardHeader>
-        <CardContent><CardForm onSubmit={createCard} /></CardContent>
+      <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
+        <CardHeader>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-[14px] font-semibold text-slate-950">新建标的复盘</CardTitle>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCreateOpen((open) => !open)}
+              className={createOpen
+                ? 'inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50'
+                : 'inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-slate-800'}
+            >
+              {createOpen ? <ChevronDown className="h-4 w-4 rotate-180 transition-transform" /> : <Plus className="h-4 w-4" />}
+              {createOpen ? '收起' : '创建新复盘'}
+            </button>
+          </div>
+        </CardHeader>
+        {createOpen && (
+          <CardContent className="border-t border-slate-100 bg-slate-50/40 pt-4">
+            <CardForm onSubmit={createCard} />
+          </CardContent>
+        )}
       </Card>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -158,12 +180,22 @@ export default function Reviews() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value, tone }: { label: string; value: number; tone: 'sky' | 'emerald' | 'slate' | 'amber' }) {
+  const toneClass = {
+    sky: 'bg-sky-50 text-sky-700 ring-sky-100',
+    emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    slate: 'bg-slate-100 text-slate-700 ring-slate-200',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+  }[tone];
+
   return (
-    <Card className="rounded-lg border-gray-200 bg-white">
+    <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
       <CardContent className="p-4">
-        <div className="text-[10px] font-bold uppercase text-gray-400">{label}</div>
-        <div className="mt-1 font-mono text-2xl font-bold text-gray-900">{value}</div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[12px] font-medium text-slate-500">{label}</div>
+          <div className={`h-2.5 w-2.5 rounded-full ring-4 ${toneClass}`} />
+        </div>
+        <div className="mt-2 font-mono text-2xl font-semibold text-slate-950">{value}</div>
       </CardContent>
     </Card>
   );

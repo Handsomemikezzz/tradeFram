@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { StockReviewCardResponse } from '@/services/api';
-import { reviewPlanStatusLabel, stockReviewInitialActionLabel, stockReviewStatusLabel } from './reviewLabels';
+import { stockReviewStatusLabel } from './reviewLabels';
 
 interface CardListProps {
   cards: StockReviewCardResponse[];
@@ -47,16 +47,13 @@ export const CardList = ({ cards, selectedId, onSelect }: CardListProps) => (
                 </Badge>
               </div>
 
-              <div className="flex min-h-6 flex-wrap gap-1">
-                <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-600">{stockReviewInitialActionLabel[card.initialAction] || card.initialAction}</Badge>
-                <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-600">{reviewPlanStatusLabel[card.initialPlanStatus] || card.initialPlanStatus}</Badge>
-                <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-600">{durationDays(card)} 天</Badge>
+              <div className="flex min-h-5 items-center justify-between gap-3 text-[10px] text-gray-400">
+                <span>{card.startDate}{card.endDate ? ` - ${card.endDate}` : ''}</span>
+                <span className="shrink-0">{durationDays(card)} 天</span>
               </div>
 
-              <p className="min-h-8 line-clamp-2 text-[11px] leading-4 text-gray-600">{card.initialReasonText}</p>
-
               {latestEvent ? (
-                <p className="truncate text-[10px] text-gray-400">最近：{latestEvent.eventDate} / {latestEvent.title}</p>
+                <p className="truncate text-[10px] text-gray-500">最近：{latestEvent.eventDate} / {latestEvent.title}</p>
               ) : (
                 <p className="text-[10px] text-gray-300">暂无过程记录</p>
               )}

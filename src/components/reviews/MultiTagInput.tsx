@@ -25,16 +25,18 @@ export const MultiTagInput = ({ value, presets, placeholder, onChange }: MultiTa
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5 min-h-6">
-        {value.map((tag) => (
-          <Badge key={tag} variant="secondary" className="gap-1 bg-blue-50 text-blue-700 border border-blue-100">
-            {tag}
-            <button type="button" aria-label={`移除 ${tag}`} onClick={() => removeTag(tag)}>
-              <X className="w-3 h-3" />
-            </button>
-          </Badge>
-        ))}
-      </div>
+      {value.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {value.map((tag) => (
+            <Badge key={tag} variant="secondary" className="gap-1 border border-sky-100 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-700">
+              {tag}
+              <button type="button" aria-label={`移除 ${tag}`} onClick={() => removeTag(tag)} className="rounded-full p-0.5 hover:bg-sky-100">
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
       <div className="flex gap-2">
         <Input
           value={draft}
@@ -46,9 +48,9 @@ export const MultiTagInput = ({ value, presets, placeholder, onChange }: MultiTa
               addTag(draft);
             }
           }}
-          className="h-8 text-[11px]"
+          className="h-10 rounded-md border-slate-200 bg-white text-[13px] shadow-sm placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-sky-100"
         />
-        <Button type="button" variant="outline" size="sm" className="h-8 text-[10px]" onClick={() => addTag(draft)}>
+        <Button type="button" variant="outline" size="sm" className="h-10 rounded-md border-slate-200 bg-white px-4 text-[12px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50" onClick={() => addTag(draft)}>
           添加
         </Button>
       </div>
@@ -57,7 +59,7 @@ export const MultiTagInput = ({ value, presets, placeholder, onChange }: MultiTa
           <button
             key={tag}
             type="button"
-            className="text-[10px] px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40"
+            className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40"
             disabled={value.includes(tag)}
             onClick={() => addTag(tag)}
           >

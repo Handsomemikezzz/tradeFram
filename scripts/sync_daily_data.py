@@ -23,6 +23,7 @@ def main() -> int:
             lookback_days=args.lookback_days,
             limit=args.limit,
             codes=_parse_codes(args.codes),
+            board_filter=None if args.board_filter == "all" else args.board_filter,
             sleep=args.sleep,
             max_retries=args.max_retries,
             retry_backoff=args.retry_backoff,
@@ -45,6 +46,7 @@ def _add_common_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--end-date")
     parser.add_argument("--limit", type=int)
     parser.add_argument("--codes")
+    parser.add_argument("--board-filter", choices=["all", "main"], default="all")
     parser.add_argument("--sleep", type=float, default=0.3)
     parser.add_argument("--max-retries", type=int, default=3)
     parser.add_argument("--retry-backoff", type=float, default=2.0)

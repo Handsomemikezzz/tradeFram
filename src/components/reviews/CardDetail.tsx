@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { ChevronDown, Plus, RotateCcw, SquareCheckBig } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,9 +44,15 @@ const TagList = ({ tags }: { tags: string[] }) => {
 export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailProps) => {
   const [reopening, setReopening] = useState(false);
   const [reopenError, setReopenError] = useState<string | null>(null);
+  const [planExpanded, setPlanExpanded] = useState(false);
+  const [activeForm, setActiveForm] = useState<'event' | 'close' | null>(null);
+  const [closeRecordExpanded, setCloseRecordExpanded] = useState(false);
 
   useEffect(() => {
     setReopenError(null);
+    setPlanExpanded(false);
+    setActiveForm(null);
+    setCloseRecordExpanded(false);
   }, [card?.id]);
 
   if (!card) {
@@ -62,11 +68,22 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailPr
     setReopening(true);
     try {
       await onReopen();
+      setCloseRecordExpanded(false);
     } catch (err) {
       setReopenError(err instanceof Error ? err.message : '重新打开失败');
     } finally {
       setReopening(false);
     }
+  };
+
+  const addEvent = async (payload: StockReviewEventRequest) => {
+    await onAddEvent(payload);
+    setActiveForm(null);
+  };
+
+  const closeCard = async (payload: StockReviewCardCloseRequest) => {
+    await onClose(payload);
+    setActiveForm(null);
   };
 
   return (
@@ -79,44 +96,87 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailPr
                 <span className="font-mono">{card.code || '-'}</span>
                 <span className="ml-2 text-gray-700">{displayName(card)}</span>
               </CardTitle>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <Badge variant="secondary" className="text-[9px]">{stockReviewStatusLabel[card.status] || card.status}</Badge>
-                <Badge variant="secondary" className="bg-gray-100 text-[9px] text-gray-600">{stockReviewInitialActionLabel[card.initialAction] || card.initialAction}</Badge>
-                <Badge variant="secondary" className="bg-gray-100 text-[9px] text-gray-600">{reviewPlanStatusLabel[card.initialPlanStatus] || card.initialPlanStatus}</Badge>
+              <div className="mt-2 text-[11px] text-gray-500">
+                {stockReviewInitialActionLabel[card.initialAction] || card.initialAction} / {reviewPlanStatusLabel[card.initialPlanStatus] || card.initialPlanStatus}
               </div>
             </div>
-            <div className="text-right text-[10px] text-gray-400">
-              <div>开始 {card.startDate}</div>
-              {card.endDate && <div>结束 {card.endDate}</div>}
+            <div className="flex flex-wrap items-center justify-end gap-2 text-right">
+              <Badge variant="secondary" className="text-[9px]">{stockReviewStatusLabel[card.status] || card.status}</Badge>
+              <div className="text-[10px] text-gray-400">
+                <div>开始 {card.startDate}</div>
+                {card.endDate && <div>结束 {card.endDate}</div>}
+              </div>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-            <TextBlock label="初始理由" value={card.initialReasonText} />
-            <TextBlock label="预期走势" value={card.expectedMoveText} />
-            <TextBlock label="原始计划" value={card.originalPlanText} />
+        <CardContent className="space-y-3">
+          <div className="rounded border border-gray-100 bg-gray-50 px-3 py-2 text-[11px] leading-5 text-gray-700">
+            <span className="font-bold text-gray-500">初始计划：</span>
+            <span className="break-words">{card.initialReasonText}</span>
           </div>
+          <button
+            type="button"
+            onClick={() => setPlanExpanded((expanded) => !expanded)}
+            className="inline-flex h-7 items-center gap-1.5 rounded border border-gray-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-600 hover:bg-gray-50"
+            aria-expanded={planExpanded}
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${planExpanded ? 'rotate-180' : ''}`} />
+            {planExpanded ? '收起计划' : '查看完整计划'}
+          </button>
+          {planExpanded && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+              <TextBlock label="预期走势" value={card.expectedMoveText} />
+              <TextBlock label="原始计划" value={card.originalPlanText} />
+              <div className="space-y-1">
+                <div className="text-[10px] font-bold uppercase text-gray-400">建卡情绪</div>
+                <div className="min-h-14 rounded border border-gray-100 bg-gray-50 px-3 py-2"><TagList tags={card.initialEmotionTags} /></div>
+              </div>
+            </div>
+          )}
+          {card.status === 'CLOSED' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-gray-100 pt-3">
+              <TextBlock label="盈亏结果" value={card.pnlText} />
+              <TextBlock label="纪律分" value={card.disciplineScore == null ? null : String(card.disciplineScore)} />
+              <TextBlock label="是否按计划" value={card.followedPlan == null ? null : followedPlanLabel[String(card.followedPlan)]} />
+            </div>
+          )}
+          {card.status === 'OPEN' && (
+            <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+              <Button
+                type="button"
+                variant={activeForm === 'event' ? 'default' : 'outline'}
+                onClick={() => setActiveForm(activeForm === 'event' ? null : 'event')}
+                className="h-8 gap-1.5 text-[10px] font-bold uppercase tracking-widest"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                追加记录
+              </Button>
+              <Button
+                type="button"
+                variant={activeForm === 'close' ? 'default' : 'outline'}
+                onClick={() => setActiveForm(activeForm === 'close' ? null : 'close')}
+                className="h-8 gap-1.5 text-[10px] font-bold uppercase tracking-widest"
+              >
+                <SquareCheckBig className="h-3.5 w-3.5" />
+                结束复盘
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <Card className="rounded-lg border-gray-200 bg-white">
-        <CardHeader><CardTitle className="text-[10px] uppercase tracking-widest">事件时间线</CardTitle></CardHeader>
-        <CardContent><EventTimeline events={card.events} /></CardContent>
-      </Card>
+      {card.status === 'OPEN' && activeForm === 'event' && (
+        <Card className="rounded-lg border-gray-200 bg-white">
+          <CardHeader><CardTitle className="text-[10px] uppercase tracking-widest">添加过程事件</CardTitle></CardHeader>
+          <CardContent><EventForm onSubmit={addEvent} /></CardContent>
+        </Card>
+      )}
 
-      {card.status === 'OPEN' && (
-        <>
-          <Card className="rounded-lg border-gray-200 bg-white">
-            <CardHeader><CardTitle className="text-[10px] uppercase tracking-widest">添加过程事件</CardTitle></CardHeader>
-            <CardContent><EventForm onSubmit={onAddEvent} /></CardContent>
-          </Card>
-
-          <Card className="rounded-lg border-gray-200 bg-white">
-            <CardHeader><CardTitle className="text-[10px] uppercase tracking-widest">结束复盘卡片</CardTitle></CardHeader>
-            <CardContent><CloseForm cardId={card.id} onSubmit={onClose} /></CardContent>
-          </Card>
-        </>
+      {card.status === 'OPEN' && activeForm === 'close' && (
+        <Card className="rounded-lg border-gray-200 bg-white">
+          <CardHeader><CardTitle className="text-[10px] uppercase tracking-widest">结束复盘卡片</CardTitle></CardHeader>
+          <CardContent><CloseForm cardId={card.id} onSubmit={closeCard} /></CardContent>
+        </Card>
       )}
 
       {card.status === 'CLOSED' && (
@@ -124,36 +184,48 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailPr
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle className="text-[10px] uppercase tracking-widest">结束记录</CardTitle>
-              <Button type="button" variant="outline" disabled={reopening} onClick={reopen} className="h-8 gap-1.5 text-[10px] font-bold uppercase tracking-widest">
-                <RotateCcw className="h-3.5 w-3.5" />
-                {reopening ? '打开中' : '重新打开'}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCloseRecordExpanded((expanded) => !expanded)}
+                  className="h-8 gap-1.5 text-[10px] font-bold uppercase tracking-widest"
+                >
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${closeRecordExpanded ? 'rotate-180' : ''}`} />
+                  {closeRecordExpanded ? '收起' : '查看全文'}
+                </Button>
+                <Button type="button" variant="outline" disabled={reopening} onClick={reopen} className="h-8 gap-1.5 text-[10px] font-bold uppercase tracking-widest">
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {reopening ? '打开中' : '重新打开'}
+                </Button>
+              </div>
             </div>
             {reopenError && <div className="text-[11px] text-red-600">{reopenError}</div>}
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <TextBlock label="结束日期" value={card.endDate} />
-              <TextBlock label="盈亏结果" value={card.pnlText} />
-              <TextBlock label="纪律分" value={card.disciplineScore == null ? null : String(card.disciplineScore)} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <TextBlock label="是否按计划" value={card.followedPlan == null ? null : followedPlanLabel[String(card.followedPlan)]} />
-              <div className="space-y-1">
-                <div className="text-[10px] font-bold uppercase text-gray-400">问题标签</div>
-                <div className="min-h-14 rounded border border-gray-100 bg-gray-50 px-3 py-2"><TagList tags={card.problemTags} /></div>
+          {closeRecordExpanded && (
+            <CardContent className="space-y-4 border-t border-gray-100 pt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <TextBlock label="卖出理由" value={card.sellReasonText} />
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase text-gray-400">问题标签</div>
+                  <div className="min-h-14 rounded border border-gray-100 bg-gray-50 px-3 py-2"><TagList tags={card.problemTags} /></div>
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-              <TextBlock label="卖出理由" value={card.sellReasonText} />
-              <TextBlock label="做得好" value={card.didWellText} />
-              <TextBlock label="做错了" value={card.didWrongText} />
-              <TextBlock label="反思" value={card.reflectionText} />
-              <TextBlock label="规则沉淀" value={card.ruleText} />
-            </div>
-          </CardContent>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                <TextBlock label="做得好" value={card.didWellText} />
+                <TextBlock label="做错了" value={card.didWrongText} />
+                <TextBlock label="反思" value={card.reflectionText} />
+                <TextBlock label="规则沉淀" value={card.ruleText} />
+              </div>
+            </CardContent>
+          )}
         </Card>
       )}
+
+      <Card className="rounded-lg border-gray-200 bg-white">
+        <CardHeader><CardTitle className="text-[10px] uppercase tracking-widest">事件时间线</CardTitle></CardHeader>
+        <CardContent><EventTimeline events={card.events} /></CardContent>
+      </Card>
     </div>
   );
 };

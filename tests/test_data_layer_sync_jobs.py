@@ -83,6 +83,18 @@ class MostlyFailingDataLayerProvider(FakeDataLayerProvider):
         raise ConnectionError("upstream disconnected")
 
 
+class MixedBoardDataLayerProvider(FakeDataLayerProvider):
+    def list_instruments(self):
+        return [
+            DataLayerInstrument("600519", "600519.SH", "SH", "贵州茅台", "主板", "白酒", None, None, "active"),
+            DataLayerInstrument("688001", "688001.SH", "SH", "科创测试", "科创板", "测试", None, None, "active"),
+            DataLayerInstrument("000001", "000001.SZ", "SZ", "平安银行", "主板", "银行", None, None, "active"),
+            DataLayerInstrument("300750", "300750.SZ", "SZ", "宁德时代", "创业板", "锂电池", None, None, "active"),
+            DataLayerInstrument("832000", "832000.BJ", "BJ", "北交测试", "北京A股", "测试", None, None, "active"),
+            DataLayerInstrument("600001", "600001.SH", "SH", "ST测试", "主板", "测试", None, None, "active"),
+        ]
+
+
 def test_init_history_data_writes_limited_raw_warehouse_metadata_and_report(tmp_path):
     provider = FakeDataLayerProvider()
     result = init_history_data(
@@ -140,6 +152,26 @@ def test_sync_daily_data_writes_recent_window_without_business_cache(tmp_path):
     daily = ParquetStore().read_dataset(tmp_path / "data" / "warehouse" / "daily_bars")
     assert set(daily["code"]) == {"600519", "000001"}
     assert set(daily["price_adjustment"]) == {"raw"}
+
+
+def test_sync_daily_data_can_filter_to_main_board_non_st(tmp_path):
+    provider = MixedBoardDataLayerProvider()
+
+    result = sync_daily_data(
+        SyncOptions(
+            data_root=tmp_path / "data",
+            provider_name="fake",
+            end_date=date(2026, 4, 30),
+            lookback_days=20,
+            board_filter="main",
+        ),
+        provider=provider,
+    )
+
+    assert result.status == "success"
+    assert provider.daily_calls == ["600519:raw", "000001:raw"]
+    daily = ParquetStore().read_dataset(tmp_path / "data" / "warehouse" / "daily_bars")
+    assert set(daily["code"]) == {"600519", "000001"}
 
 
 def test_sync_daily_data_uses_stable_per_stock_history_even_when_bulk_is_available(tmp_path):

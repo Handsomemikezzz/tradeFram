@@ -14,8 +14,10 @@
 		<string>data</string>
 		<string>--lookback-days</string>
 		<string>5</string>
+		<string>--board-filter</string>
+		<string>main</string>
 		<string>--sleep</string>
-		<string>0.8</string>
+		<string>0.3</string>
 		<string>--max-retries</string>
 		<string>5</string>
 		<string>--retry-backoff</string>
@@ -34,9 +36,9 @@
 	<key>StartCalendarInterval</key>
 	<dict>
 		<key>Hour</key>
-		<integer>18</integer>
+		<integer>16</integer>
 		<key>Minute</key>
-		<integer>0</integer>
+		<integer>30</integer>
 	</dict>
 	<key>WorkingDirectory</key>
 	<string>/Users/chuhaonan/codeMIni-hn/2026/trade/waytofree</string>

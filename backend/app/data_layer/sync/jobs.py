@@ -34,6 +34,7 @@ class SyncOptions:
     lookback_days: int = 20
     limit: int | None = None
     codes: list[str] | None = None
+    board_filter: str | None = None
     sleep: float = 0.0
     max_retries: int = 1
     retry_backoff: float = 1.0
@@ -222,12 +223,38 @@ def _merge_warehouse(store: ParquetStore, path: Path, frame: pd.DataFrame, keys:
 
 def _select_instruments(instruments: list[DataLayerInstrument], options: SyncOptions) -> list[DataLayerInstrument]:
     selected = instruments
+    if options.board_filter:
+        selected = [instrument for instrument in selected if _matches_board_filter(instrument, options.board_filter)]
     if options.codes:
         codes = {str(code).zfill(6) for code in options.codes}
         selected = [instrument for instrument in selected if instrument.code in codes]
     if options.limit is not None:
         selected = selected[: options.limit]
     return selected
+
+
+def _matches_board_filter(instrument: DataLayerInstrument, board_filter: str) -> bool:
+    normalized = board_filter.strip().lower().replace("_", "-")
+    if normalized in {"", "all"}:
+        return True
+    if normalized in {"main", "main-board", "mainboard", "主板"}:
+        return _is_main_board(instrument)
+    raise ValueError(f"unsupported board filter: {board_filter}")
+
+
+def _is_main_board(instrument: DataLayerInstrument) -> bool:
+    if instrument.status.lower() != "active" or _is_st(instrument.name):
+        return False
+    if instrument.exchange == "SH":
+        return instrument.code.startswith(("600", "601", "603", "605"))
+    if instrument.exchange == "SZ":
+        return instrument.code.startswith(("000", "001", "002", "003"))
+    return False
+
+
+def _is_st(name: str) -> bool:
+    normalized = name.upper().replace(" ", "")
+    return normalized.startswith(("*ST", "ST", "S*ST"))
 
 
 def _with_retries(fn, options: SyncOptions):

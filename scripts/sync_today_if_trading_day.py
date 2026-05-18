@@ -16,6 +16,7 @@ def main() -> int:
     parser.add_argument("--data-root", default="data")
     parser.add_argument("--provider", default="akshare")
     parser.add_argument("--lookback-days", type=int, default=5)
+    parser.add_argument("--board-filter", choices=["all", "main"], default="all")
     parser.add_argument("--sleep", type=float, default=0.3)
     parser.add_argument("--max-retries", type=int, default=3)
     parser.add_argument("--retry-backoff", type=float, default=2.0)
@@ -39,6 +40,7 @@ def main() -> int:
             provider_name=args.provider,
             end_date=today,
             lookback_days=args.lookback_days,
+            board_filter=None if args.board_filter == "all" else args.board_filter,
             sleep=args.sleep,
             max_retries=args.max_retries,
             retry_backoff=args.retry_backoff,
