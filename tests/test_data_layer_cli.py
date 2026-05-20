@@ -28,3 +28,12 @@ def test_sync_today_if_trading_day_cli_help_lists_daily_scheduler_flags():
     assert result.returncode == 0
     assert "--lookback-days" in result.stdout
     assert "--update-business-cache" not in result.stdout
+
+
+def test_reconcile_daily_data_cli_help_lists_midnight_reconcile_flags():
+    result = subprocess.run([sys.executable, "scripts/reconcile_daily_data.py", "--help"], capture_output=True, text=True)
+
+    assert result.returncode == 0
+    assert "--lookback-days" in result.stdout
+    assert "--threshold" in result.stdout
+    assert "--now" in result.stdout
