@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronDown, Plus, RotateCcw, SquareCheckBig } from 'lucide-react';
+import { ChevronDown, Plus, RotateCcw, SquareCheckBig, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { StockReviewCardCloseRequest, StockReviewCardResponse, StockReviewEventRequest } from '@/services/api';
+import { ApiClientError, StockReviewCardCloseRequest, StockReviewCardResponse, StockReviewEventRequest } from '@/services/api';
 import { EventForm } from './EventForm';
 import { EventTimeline } from './EventTimeline';
 import { MultiTagInput } from './MultiTagInput';
@@ -15,9 +15,10 @@ const textareaClass = 'min-h-16 rounded border border-gray-200 bg-white px-3 py-
 
 interface CardDetailProps {
   card: StockReviewCardResponse | null;
-  onAddEvent: (payload: StockReviewEventRequest) => Promise<void>;
-  onClose: (payload: StockReviewCardCloseRequest) => Promise<void>;
-  onReopen: () => Promise<void>;
+  onAddEvent: (cardId: string, payload: StockReviewEventRequest) => Promise<void>;
+  onClose: (cardId: string, payload: StockReviewCardCloseRequest) => Promise<void>;
+  onReopen: (cardId: string) => Promise<void>;
+  onDelete: (cardId: string) => Promise<void>;
 }
 
 const displayName = (card: StockReviewCardResponse) => card.name || card.sectorTags.join(' / ') || '-';
@@ -41,8 +42,10 @@ const TagList = ({ tags }: { tags: string[] }) => {
   );
 };
 
-export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailProps) => {
+export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: CardDetailProps) => {
   const [reopening, setReopening] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [planExpanded, setPlanExpanded] = useState(false);
   const [activeForm, setActiveForm] = useState<'event' | 'close' | null>(null);
@@ -50,6 +53,7 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailPr
 
   useEffect(() => {
     setReopenError(null);
+    setDeleteError(null);
     setPlanExpanded(false);
     setActiveForm(null);
     setCloseRecordExpanded(false);
@@ -67,7 +71,7 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailPr
     setReopenError(null);
     setReopening(true);
     try {
-      await onReopen();
+      await onReopen(card.id);
       setCloseRecordExpanded(false);
     } catch (err) {
       setReopenError(err instanceof Error ? err.message : '重新打开失败');
@@ -77,13 +81,37 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailPr
   };
 
   const addEvent = async (payload: StockReviewEventRequest) => {
-    await onAddEvent(payload);
-    setActiveForm(null);
+    try {
+      await onAddEvent(card.id, payload);
+      setActiveForm(null);
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'REVIEW_CARD_NOT_FOUND') {
+        setActiveForm(null);
+      }
+      throw err;
+    }
   };
 
   const closeCard = async (payload: StockReviewCardCloseRequest) => {
-    await onClose(payload);
+    await onClose(card.id, payload);
     setActiveForm(null);
+  };
+
+  const deleteCard = async () => {
+    const label = `${card.code || '-'} ${displayName(card)}`;
+    if (!window.confirm(`确定删除「${label}」的复盘卡片？\n删除后不可恢复，关联的过程事件也会一并删除。`)) {
+      return;
+    }
+
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await onDelete(card.id);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : '删除失败');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -101,6 +129,16 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailPr
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 text-right">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleting}
+                onClick={deleteCard}
+                className="h-8 gap-1.5 border-red-200 text-[10px] font-bold uppercase tracking-widest text-red-600 hover:bg-red-50 hover:text-red-700"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {deleting ? '删除中' : '删除卡片'}
+              </Button>
               <Badge variant="secondary" className="text-[9px]">{stockReviewStatusLabel[card.status] || card.status}</Badge>
               <div className="text-[10px] text-gray-400">
                 <div>开始 {card.startDate}</div>
@@ -140,6 +178,7 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen }: CardDetailPr
               <TextBlock label="是否按计划" value={card.followedPlan == null ? null : followedPlanLabel[String(card.followedPlan)]} />
             </div>
           )}
+          {deleteError && <div className="text-[11px] text-red-600">{deleteError}</div>}
           {card.status === 'OPEN' && (
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
               <Button

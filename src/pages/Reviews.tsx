@@ -6,6 +6,7 @@ import { CardDetail } from '@/components/reviews/CardDetail';
 import { CardForm } from '@/components/reviews/CardForm';
 import { CardList } from '@/components/reviews/CardList';
 import {
+  ApiClientError,
   reviewCardApi,
   StockReviewCardCloseRequest,
   StockReviewCardRequest,
@@ -55,8 +56,22 @@ export default function Reviews() {
       reviewCardApi.getCards({ status: statusFilter, keyword: keyword || undefined, pageSize: 50 }),
       reviewCardApi.getSummary({ startDate: weekStart, endDate: weekEnd }),
     ]);
-    const nextId = nextSelectedId(page.items, preferredSelectedId);
-    const nextCard = nextId ? await reviewCardApi.getCard(nextId) : null;
+    let nextId = nextSelectedId(page.items, preferredSelectedId);
+    let nextCard: StockReviewCardResponse | null = null;
+
+    if (nextId) {
+      try {
+        nextCard = await reviewCardApi.getCard(nextId);
+      } catch (err) {
+        if (err instanceof ApiClientError && err.code === 'REVIEW_CARD_NOT_FOUND') {
+          nextId = page.items[0]?.id ?? null;
+          nextCard = nextId ? await reviewCardApi.getCard(nextId) : null;
+        } else {
+          throw err;
+        }
+      }
+    }
+
     setCards(page.items);
     setSummary(summaryData);
     setSelectedId(nextId);
@@ -67,6 +82,14 @@ export default function Reviews() {
     load().catch((err: Error) => toast.error(err.message));
   }, [status, weekStart]);
 
+  useEffect(() => {
+    if (!selectedCard) return;
+    if (!cards.some((item) => item.id === selectedCard.id)) {
+      setSelectedCard(null);
+      setSelectedId(null);
+    }
+  }, [cards, selectedCard]);
+
   const createCard = async (payload: StockReviewCardRequest) => {
     const created = await reviewCardApi.createCard(payload);
     toast.success('标的复盘卡片已建立');
@@ -75,36 +98,82 @@ export default function Reviews() {
     await load(created.id, 'OPEN');
   };
 
+  const handleMissingCard = async () => {
+    toast.error('该复盘卡片已不存在，请重新选择或新建');
+    setSelectedId(null);
+    setSelectedCard(null);
+    await load();
+  };
+
   const selectCard = async (id: string) => {
-    setSelectedId(id);
     try {
-      setSelectedCard(await reviewCardApi.getCard(id));
+      const detail = await reviewCardApi.getCard(id);
+      setSelectedId(id);
+      setSelectedCard(detail);
     } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'REVIEW_CARD_NOT_FOUND') {
+        await handleMissingCard();
+        return;
+      }
       toast.error(err instanceof Error ? err.message : '加载卡片详情失败');
     }
   };
 
-  const addEvent = async (payload: StockReviewEventRequest) => {
-    if (!selectedId) return;
-    await reviewCardApi.addEvent(selectedId, payload);
-    toast.success('过程事件已添加');
-    await load(selectedId);
+  const addEvent = async (cardId: string, payload: StockReviewEventRequest) => {
+    try {
+      await reviewCardApi.addEvent(cardId, payload);
+      toast.success('过程事件已添加');
+      await load(cardId);
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'REVIEW_CARD_NOT_FOUND') {
+        await handleMissingCard();
+      }
+      throw err;
+    }
   };
 
-  const closeCard = async (payload: StockReviewCardCloseRequest) => {
-    if (!selectedId) return;
-    const closed = await reviewCardApi.closeCard(selectedId, payload);
-    toast.success('复盘卡片已结束');
-    setStatus('ALL');
-    await load(closed.id, 'ALL');
+  const closeCard = async (cardId: string, payload: StockReviewCardCloseRequest) => {
+    try {
+      const closed = await reviewCardApi.closeCard(cardId, payload);
+      toast.success('复盘卡片已结束');
+      setStatus('ALL');
+      await load(closed.id, 'ALL');
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'REVIEW_CARD_NOT_FOUND') {
+        await handleMissingCard();
+      }
+      throw err;
+    }
   };
 
-  const reopenCard = async () => {
-    if (!selectedId) return;
-    const reopened = await reviewCardApi.reopenCard(selectedId);
-    toast.success('复盘卡片已重新打开');
-    setStatus('ALL');
-    await load(reopened.id, 'ALL');
+  const reopenCard = async (cardId: string) => {
+    try {
+      const reopened = await reviewCardApi.reopenCard(cardId);
+      toast.success('复盘卡片已重新打开');
+      setStatus('ALL');
+      await load(reopened.id, 'ALL');
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'REVIEW_CARD_NOT_FOUND') {
+        await handleMissingCard();
+      }
+      throw err;
+    }
+  };
+
+  const deleteCard = async (cardId: string) => {
+    try {
+      await reviewCardApi.deleteCard(cardId);
+      toast.success('复盘卡片已删除');
+      setSelectedId(null);
+      setSelectedCard(null);
+      await load();
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'REVIEW_CARD_NOT_FOUND') {
+        await handleMissingCard();
+        return;
+      }
+      throw err;
+    }
   };
 
   return (
@@ -174,7 +243,7 @@ export default function Reviews() {
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,360px)_1fr] gap-4 items-start">
         <CardList cards={cards} selectedId={selectedId} onSelect={selectCard} />
-        <CardDetail card={selectedCard} onAddEvent={addEvent} onClose={closeCard} onReopen={reopenCard} />
+        <CardDetail card={selectedCard} onAddEvent={addEvent} onClose={closeCard} onReopen={reopenCard} onDelete={deleteCard} />
       </div>
     </div>
   );

@@ -51,7 +51,10 @@ export const EventTimeline = ({ events = [] }: EventTimelineProps) => {
             >
               <div className="min-w-0">
                 <div className="font-mono text-[10px] font-bold text-gray-400">{event.eventDate}</div>
-                <h4 className="break-words text-[13px] font-bold text-gray-900">{event.title}</h4>
+                <h4 className="break-words text-[13px] font-bold text-gray-900">
+                  {stockReviewEventTypeLabel[event.eventType] || event.eventType}
+                </h4>
+                <p className="mt-0.5 line-clamp-2 break-words text-[11px] leading-5 text-gray-500">{event.reasonText}</p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                 <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-600">

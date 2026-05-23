@@ -18,7 +18,6 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
   const [error, setError] = useState<string | null>(null);
   const [eventDate, setEventDate] = useState(today());
   const [eventType, setEventType] = useState<StockReviewEventType>('HOLD');
-  const [title, setTitle] = useState('');
   const [reasonText, setReasonText] = useState('');
   const [positionSnapshot, setPositionSnapshot] = useState('');
   const [deviatedFromPlan, setDeviatedFromPlan] = useState(false);
@@ -28,7 +27,6 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
   const reset = () => {
     setEventDate(today());
     setEventType('HOLD');
-    setTitle('');
     setReasonText('');
     setPositionSnapshot('');
     setDeviatedFromPlan(false);
@@ -45,7 +43,7 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
       await onSubmit({
         eventDate,
         eventType,
-        title,
+        title: stockReviewEventTypeLabel[eventType] || eventType,
         reasonText,
         positionSnapshot: positionSnapshot.trim() || null,
         deviatedFromPlan,
@@ -62,7 +60,7 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
 
   return (
     <form className="space-y-4" onSubmit={submit}>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="space-y-1">
           <span className="text-[10px] font-bold uppercase text-gray-500">日期</span>
           <Input type="date" value={eventDate} max={today()} onChange={(event) => setEventDate(event.target.value)} className="h-8 text-[11px]" required />
@@ -74,10 +72,6 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
-        </label>
-        <label className="space-y-1 md:col-span-2">
-          <span className="text-[10px] font-bold uppercase text-gray-500">标题</span>
-          <Input value={title} placeholder="例：冲高未封板减仓" onChange={(event) => setTitle(event.target.value)} className="h-8 text-[11px]" required />
         </label>
       </div>
 

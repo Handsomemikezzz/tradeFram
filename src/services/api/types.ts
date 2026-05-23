@@ -419,7 +419,7 @@ export interface WeeklyWorkbenchResponse {
 
 export type StockReviewCardStatus = 'OPEN' | 'CLOSED';
 export type StockReviewInitialAction = 'BUY' | 'WATCH' | 'PLAN_BUY';
-export type StockReviewEventType = 'HOLD' | 'ADD' | 'REDUCE' | 'SELL' | 'PLAN_CHANGE' | 'EMOTION' | 'OBSERVATION';
+export type StockReviewEventType = 'HOLD' | 'ADD' | 'REDUCE' | 'SELL' | 'DO_T' | 'PLAN_CHANGE' | 'EMOTION' | 'OBSERVATION';
 
 export interface StockReviewEventResponse {
   id: string;

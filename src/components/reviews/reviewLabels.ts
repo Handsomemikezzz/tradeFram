@@ -53,6 +53,7 @@ export const stockReviewEventTypeLabel: Record<string, string> = {
   ADD: '加仓',
   REDUCE: '减仓',
   SELL: '卖出',
+  DO_T: '做 T',
   PLAN_CHANGE: '计划变化',
   EMOTION: '情绪波动',
   OBSERVATION: '观察记录',
