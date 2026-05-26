@@ -55,10 +55,19 @@ function buildUrl(path: string, query?: QueryParams): string {
 }
 
 async function request<T>(method: string, path: string, options: { query?: QueryParams; body?: unknown } = {}): Promise<T> {
+  const isFormData = options.body instanceof FormData;
   const response = await fetch(buildUrl(path, options.query), {
     method,
-    headers: options.body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    headers: options.body === undefined
+      ? undefined
+      : isFormData
+        ? undefined
+        : { 'Content-Type': 'application/json' },
+    body: options.body === undefined
+      ? undefined
+      : isFormData
+        ? (options.body as FormData)
+        : JSON.stringify(options.body),
   });
 
   let envelope: ApiEnvelope<T> | undefined;

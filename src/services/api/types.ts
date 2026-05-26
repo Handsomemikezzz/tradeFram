@@ -432,6 +432,7 @@ export interface StockReviewEventResponse {
   deviatedFromPlan: boolean;
   emotionTags: string[];
   problemTags: string[];
+  images?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -460,6 +461,18 @@ export interface StockReviewCardResponse {
   didWrongText: string | null;
   reflectionText: string | null;
   ruleText: string | null;
+  initialImages?: string[];
+  closeImages?: string[];
+  
+  // Professional Trading Audit Fields
+  strategyType: string | null;
+  expectedRrRatio: string | null;
+  stopLossTarget: string | null;
+  pnlAmount: number | null;
+  rMultiple: number | null;
+  marketRegime: string | null;
+  exitQuality: string | null;
+
   createdAt: string;
   updatedAt: string;
   events?: StockReviewEventResponse[];
@@ -477,6 +490,12 @@ export interface StockReviewCardRequest {
   expectedMoveText: string;
   originalPlanText: string;
   initialEmotionTags: string[];
+  initialImages?: string[];
+  
+  // Professional Trading Audit Fields
+  strategyType?: string | null;
+  expectedRrRatio?: string | null;
+  stopLossTarget?: string | null;
 }
 
 export interface StockReviewEventRequest {
@@ -488,6 +507,7 @@ export interface StockReviewEventRequest {
   deviatedFromPlan: boolean;
   emotionTags: string[];
   problemTags: string[];
+  images?: string[];
 }
 
 export interface StockReviewCardCloseRequest {
@@ -501,6 +521,13 @@ export interface StockReviewCardCloseRequest {
   didWrongText: string;
   reflectionText: string;
   ruleText: string;
+  closeImages?: string[];
+  
+  // Professional Trading Audit Fields
+  pnlAmount?: number | null;
+  rMultiple?: number | null;
+  marketRegime?: string | null;
+  exitQuality?: string | null;
 }
 
 export interface StockReviewCardSummaryResponse {
@@ -508,6 +535,8 @@ export interface StockReviewCardSummaryResponse {
   endDate: string;
   openCount: number;
   closedCount: number;
+  followedPlanCount?: number;
+  deviatedPlanCount?: number;
   createdInRangeCount: number;
   closedInRangeCount: number;
   lowDisciplineClosedCount: number;

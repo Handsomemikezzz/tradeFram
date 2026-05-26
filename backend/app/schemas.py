@@ -211,6 +211,12 @@ class StockReviewCardCreate(BaseModel):
     expectedMoveText: str = ""
     originalPlanText: str = ""
     initialEmotionTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+    initialImages: list[str] = Field(default_factory=list)
+    
+    # Professional Trading Audit Fields
+    strategyType: str | None = None
+    expectedRrRatio: str | None = None
+    stopLossTarget: str | None = None
 
     @field_validator("code", "name", mode="before")
     @classmethod
@@ -262,6 +268,16 @@ class StockReviewCardUpdate(BaseModel):
     expectedMoveText: str | None = None
     originalPlanText: str | None = None
     initialEmotionTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+    initialImages: list[str] | None = Field(default=None)
+    
+    # Professional Trading Audit Fields
+    strategyType: str | None = None
+    expectedRrRatio: str | None = None
+    stopLossTarget: str | None = None
+    pnlAmount: float | None = None
+    rMultiple: float | None = None
+    marketRegime: str | None = None
+    exitQuality: str | None = None
 
     @field_validator("code", "name", mode="before")
     @classmethod
@@ -306,6 +322,7 @@ class StockReviewEventCreate(BaseModel):
     deviatedFromPlan: bool = False
     emotionTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
     problemTags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_PER_FIELD)
+    images: list[str] = Field(default_factory=list)
 
     @field_validator("title", "reasonText")
     @classmethod
@@ -336,6 +353,7 @@ class StockReviewEventUpdate(BaseModel):
     deviatedFromPlan: bool | None = None
     emotionTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
     problemTags: list[str] | None = Field(default=None, max_length=MAX_TAGS_PER_FIELD)
+    images: list[str] | None = Field(default=None)
 
     @field_validator("title", "reasonText")
     @classmethod
@@ -370,6 +388,13 @@ class StockReviewCardClose(BaseModel):
     didWrongText: str = Field(..., min_length=1)
     reflectionText: str = Field(..., min_length=1)
     ruleText: str = Field(..., min_length=1)
+    closeImages: list[str] = Field(default_factory=list)
+    
+    # Professional Trading Audit Fields
+    pnlAmount: float | None = None
+    rMultiple: float | None = None
+    marketRegime: str | None = None
+    exitQuality: str | None = None
 
     @field_validator(
         "sellReasonText",

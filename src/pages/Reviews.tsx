@@ -16,7 +16,7 @@ import {
   StockReviewEventRequest,
 } from '@/services/api';
 
-type ReviewStatusFilter = StockReviewCardStatus | 'ALL';
+type ReviewStatusFilter = 'OPEN' | 'CLOSED' | 'FOLLOWED' | 'DEVIATED' | 'ALL';
 
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
@@ -48,13 +48,28 @@ export default function Reviews() {
   const [status, setStatus] = useState<ReviewStatusFilter>('OPEN');
   const [keyword, setKeyword] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [weekStart, setWeekStart] = useState(mondayOf(isoToday()));
-  const weekEnd = useMemo(() => sundayOf(weekStart), [weekStart]);
 
   const load = async (preferredSelectedId = selectedId, statusFilter = status) => {
+    let apiStatus: StockReviewCardStatus | 'ALL' | undefined;
+    let followedPlan: boolean | undefined;
+
+    if (statusFilter === 'OPEN') {
+      apiStatus = 'OPEN';
+    } else if (statusFilter === 'CLOSED') {
+      apiStatus = 'CLOSED';
+    } else if (statusFilter === 'FOLLOWED') {
+      apiStatus = 'CLOSED';
+      followedPlan = true;
+    } else if (statusFilter === 'DEVIATED') {
+      apiStatus = 'CLOSED';
+      followedPlan = false;
+    } else {
+      apiStatus = 'ALL';
+    }
+
     const [page, summaryData] = await Promise.all([
-      reviewCardApi.getCards({ status: statusFilter, keyword: keyword || undefined, pageSize: 50 }),
-      reviewCardApi.getSummary({ startDate: weekStart, endDate: weekEnd }),
+      reviewCardApi.getCards({ status: apiStatus, followedPlan, keyword: keyword || undefined, pageSize: 50 }),
+      reviewCardApi.getSummary(),
     ]);
     let nextId = nextSelectedId(page.items, preferredSelectedId);
     let nextCard: StockReviewCardResponse | null = null;
@@ -80,7 +95,7 @@ export default function Reviews() {
 
   useEffect(() => {
     load().catch((err: Error) => toast.error(err.message));
-  }, [status, weekStart]);
+  }, [status]);
 
   useEffect(() => {
     if (!selectedCard) return;
@@ -186,17 +201,37 @@ export default function Reviews() {
           </h2>
           <p className="text-muted-foreground text-sm mt-1">为每只股票建立一张复盘卡片，记录买入逻辑、持有过程、卖出结果和纪律反思。</p>
         </div>
-        <label className="space-y-1">
-          <span className="block text-[10px] uppercase tracking-widest text-gray-400 font-bold">统计周起始</span>
-          <input type="date" value={weekStart} onChange={(event) => setWeekStart(mondayOf(event.target.value))} className="h-8 rounded border border-gray-200 bg-white px-2 text-[11px]" />
-        </label>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric label="进行中" value={summary?.openCount ?? 0} tone="sky" />
-        <Metric label="本周新建" value={summary?.createdInRangeCount ?? 0} tone="emerald" />
-        <Metric label="本周结束" value={summary?.closedInRangeCount ?? 0} tone="slate" />
-        <Metric label="低纪律结束" value={summary?.lowDisciplineClosedCount ?? 0} tone="amber" />
+        <Metric
+          label="进行中"
+          value={summary?.openCount ?? 0}
+          tone="sky"
+          active={status === 'OPEN'}
+          onClick={() => setStatus('OPEN')}
+        />
+        <Metric
+          label="已结束"
+          value={summary?.closedCount ?? 0}
+          tone="slate"
+          active={status === 'CLOSED'}
+          onClick={() => setStatus('CLOSED')}
+        />
+        <Metric
+          label="遵守计划"
+          value={summary?.followedPlanCount ?? 0}
+          tone="emerald"
+          active={status === 'FOLLOWED'}
+          onClick={() => setStatus('FOLLOWED')}
+        />
+        <Metric
+          label="偏离计划"
+          value={summary?.deviatedPlanCount ?? 0}
+          tone="amber"
+          active={status === 'DEVIATED'}
+          onClick={() => setStatus('DEVIATED')}
+        />
       </div>
 
       <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
@@ -228,6 +263,8 @@ export default function Reviews() {
         <select value={status} onChange={(event) => setStatus(event.target.value as ReviewStatusFilter)} className="h-8 rounded border border-gray-200 bg-white px-2 text-[11px]">
           <option value="OPEN">进行中</option>
           <option value="CLOSED">已结束</option>
+          <option value="FOLLOWED">遵守计划 (已结束)</option>
+          <option value="DEVIATED">偏离计划 (已结束)</option>
           <option value="ALL">全部</option>
         </select>
         <input
@@ -249,7 +286,19 @@ export default function Reviews() {
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: number; tone: 'sky' | 'emerald' | 'slate' | 'amber' }) {
+function Metric({
+  label,
+  value,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  tone: 'sky' | 'emerald' | 'slate' | 'amber';
+  active: boolean;
+  onClick?: () => void;
+}) {
   const toneClass = {
     sky: 'bg-sky-50 text-sky-700 ring-sky-100',
     emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
@@ -257,8 +306,20 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: 's
     amber: 'bg-amber-50 text-amber-700 ring-amber-100',
   }[tone];
 
+  const activeBorder = {
+    sky: 'border-sky-500 ring-2 ring-sky-100/50 shadow-sm',
+    emerald: 'border-emerald-500 ring-2 ring-emerald-100/50 shadow-sm',
+    slate: 'border-slate-500 ring-2 ring-slate-200 shadow-sm',
+    amber: 'border-amber-500 ring-2 ring-amber-100/50 shadow-sm',
+  }[tone];
+
   return (
-    <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
+    <Card
+      onClick={onClick}
+      className={`rounded-lg bg-white cursor-pointer transition-all hover:shadow-md hover:-translate-y-[2px] active:scale-[0.98] ${
+        active ? `${activeBorder} border-transparent` : 'border-slate-200 hover:border-slate-300'
+      }`}
+    >
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="text-[12px] font-medium text-slate-500">{label}</div>

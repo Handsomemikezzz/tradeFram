@@ -73,3 +73,28 @@ def _ensure_lightweight_schema() -> None:
             ]:
                 if column not in table_columns:
                     conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} FLOAT NOT NULL DEFAULT 0")
+
+        # Auto migrations for stock review cards and events multiple images
+        card_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(stock_review_cards)").fetchall()}
+        if "initial_images" not in card_cols:
+            conn.exec_driver_sql("ALTER TABLE stock_review_cards ADD COLUMN initial_images JSON NOT NULL DEFAULT '[]'")
+        if "close_images" not in card_cols:
+            conn.exec_driver_sql("ALTER TABLE stock_review_cards ADD COLUMN close_images JSON NOT NULL DEFAULT '[]'")
+            
+        # Auto migrations for professional trading audit fields
+        for col, col_type in [
+            ("strategy_type", "VARCHAR(64)"),
+            ("expected_rr_ratio", "VARCHAR(32)"),
+            ("stop_loss_target", "VARCHAR(64)"),
+            ("pnl_amount", "FLOAT"),
+            ("r_multiple", "FLOAT"),
+            ("market_regime", "VARCHAR(64)"),
+            ("exit_quality", "VARCHAR(64)"),
+        ]:
+            if col not in card_cols:
+                conn.exec_driver_sql(f"ALTER TABLE stock_review_cards ADD COLUMN {col} {col_type}")
+            
+        event_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(stock_review_events)").fetchall()}
+        if "images" not in event_cols:
+            conn.exec_driver_sql("ALTER TABLE stock_review_events ADD COLUMN images JSON NOT NULL DEFAULT '[]'")
+

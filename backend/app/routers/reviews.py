@@ -55,6 +55,7 @@ def get_stock_review_cards(
     startDate: date | None = None,
     endDate: date | None = None,
     planStatus: str | None = None,
+    followedPlan: bool | None = None,
     problemTags: list[str] | None = Query(default=None),
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, ge=1, le=100),
@@ -67,6 +68,7 @@ def get_stock_review_cards(
         start_date=startDate,
         end_date=endDate,
         plan_status=planStatus,
+        followed_plan=followedPlan,
         problem_tags=problemTags,
         page=page,
         page_size=pageSize,
@@ -75,7 +77,7 @@ def get_stock_review_cards(
 
 
 @router.get("/reviews/cards/summary")
-def get_stock_review_cards_summary(startDate: date, endDate: date, db: Session = Depends(get_db)):
+def get_stock_review_cards_summary(startDate: date | None = None, endDate: date | None = None, db: Session = Depends(get_db)):
     return ok(get_stock_review_card_summary(db, startDate, endDate))
 
 

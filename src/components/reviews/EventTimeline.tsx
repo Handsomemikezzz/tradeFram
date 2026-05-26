@@ -4,8 +4,11 @@ import { Badge } from '@/components/ui/badge';
 import { StockReviewEventResponse } from '@/services/api';
 import { stockReviewEventTypeLabel } from './reviewLabels';
 
+import { resolveImageUrl } from './MultiImageUpload';
+
 interface EventTimelineProps {
   events?: StockReviewEventResponse[];
+  onImageClick?: (images: string[], index: number) => void;
 }
 
 const TagRow = ({ label, tags, tone }: { label: string; tags: string[]; tone: 'blue' | 'amber' }) => {
@@ -22,7 +25,7 @@ const TagRow = ({ label, tags, tone }: { label: string; tags: string[]; tone: 'b
   );
 };
 
-export const EventTimeline = ({ events = [] }: EventTimelineProps) => {
+export const EventTimeline = ({ events = [], onImageClick }: EventTimelineProps) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -74,8 +77,27 @@ export const EventTimeline = ({ events = [] }: EventTimelineProps) => {
                   </p>
                 )}
 
-                <TagRow label="情绪" tags={event.emotionTags} tone="blue" />
-                <TagRow label="问题" tags={event.problemTags} tone="amber" />
+                {event.images && event.images.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1 pb-2">
+                    {event.images.map((imgUrl, imgIdx) => (
+                      <img
+                        key={imgIdx}
+                        src={resolveImageUrl(imgUrl)}
+                        alt={`Event chart ${imgIdx + 1}`}
+                        className="h-14 w-14 object-cover rounded border border-slate-200 cursor-pointer hover:border-sky-500 shadow-sm transition hover:scale-105 active:scale-95"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onImageClick?.(event.images!, imgIdx);
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">
+                  <TagRow label="情绪" tags={event.emotionTags} tone="blue" />
+                  <TagRow label="问题" tags={event.problemTags} tone="amber" />
+                </div>
               </div>
             )}
           </div>

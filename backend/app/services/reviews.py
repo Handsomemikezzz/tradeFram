@@ -161,6 +161,12 @@ def create_stock_review_card(db: Session, payload: StockReviewCardCreate) -> m.S
         expected_move_text=payload.expectedMoveText,
         original_plan_text=payload.originalPlanText,
         initial_emotion_tags=payload.initialEmotionTags,
+        initial_images=payload.initialImages,
+        
+        # Professional Trading Audit Fields
+        strategy_type=payload.strategyType,
+        expected_rr_ratio=payload.expectedRrRatio,
+        stop_loss_target=payload.stopLossTarget,
     )
     db.add(card)
     db.commit()
@@ -183,6 +189,7 @@ def list_stock_review_cards(
     start_date: date | None = None,
     end_date: date | None = None,
     plan_status: str | None = None,
+    followed_plan: bool | None = None,
     problem_tags: list[str] | None = None,
     page: int = 1,
     page_size: int = 20,
@@ -199,6 +206,8 @@ def list_stock_review_cards(
         query = query.filter(m.StockReviewCard.start_date <= end_date)
     if plan_status:
         query = query.filter(m.StockReviewCard.initial_plan_status == plan_status)
+    if followed_plan is not None:
+        query = query.filter(m.StockReviewCard.followed_plan == followed_plan)
 
     all_items = query.order_by(desc(m.StockReviewCard.start_date), desc(m.StockReviewCard.created_at)).all()
     filtered = [item for item in all_items if _contains_all(item.problem_tags or [], problem_tags)]
@@ -220,6 +229,16 @@ def update_stock_review_card(db: Session, card_id: str, payload: StockReviewCard
         "expectedMoveText": "expected_move_text",
         "originalPlanText": "original_plan_text",
         "initialEmotionTags": "initial_emotion_tags",
+        "initialImages": "initial_images",
+        
+        # Professional Trading Audit Fields
+        "strategyType": "strategy_type",
+        "expectedRrRatio": "expected_rr_ratio",
+        "stopLossTarget": "stop_loss_target",
+        "pnlAmount": "pnl_amount",
+        "rMultiple": "r_multiple",
+        "marketRegime": "market_regime",
+        "exitQuality": "exit_quality",
     }
     for key, value in data.items():
         setattr(card, field_map.get(key, key), value)
@@ -248,6 +267,7 @@ def create_stock_review_event(db: Session, card_id: str, payload: StockReviewEve
         deviated_from_plan=payload.deviatedFromPlan,
         emotion_tags=payload.emotionTags,
         problem_tags=payload.problemTags,
+        images=payload.images,
     )
     db.add(event)
     db.commit()
@@ -282,6 +302,7 @@ def update_stock_review_event(
         "deviatedFromPlan": "deviated_from_plan",
         "emotionTags": "emotion_tags",
         "problemTags": "problem_tags",
+        "images": "images",
     }
     for key, value in data.items():
         setattr(event, field_map.get(key, key), value)
@@ -315,6 +336,14 @@ def close_stock_review_card(db: Session, card_id: str, payload: StockReviewCardC
     card.did_wrong_text = payload.didWrongText
     card.reflection_text = payload.reflectionText
     card.rule_text = payload.ruleText
+    card.close_images = payload.closeImages
+    
+    # Professional Trading Audit Fields
+    card.pnl_amount = payload.pnlAmount
+    card.r_multiple = payload.rMultiple
+    card.market_regime = payload.marketRegime
+    card.exit_quality = payload.exitQuality
+    
     card.updated_at = m.now_utc()
     db.commit()
     db.refresh(card)
@@ -330,19 +359,28 @@ def reopen_stock_review_card(db: Session, card_id: str) -> m.StockReviewCard:
     return card
 
 
-def get_stock_review_card_summary(db: Session, start_date: date, end_date: date) -> dict:
+def get_stock_review_card_summary(db: Session, start_date: date | None = None, end_date: date | None = None) -> dict:
     cards = db.query(m.StockReviewCard).all()
-    created_in_range = [card for card in cards if start_date <= card.start_date <= end_date]
+    
+    # Gracefully default to wide range for backward compatibility if dates are not provided
+    effective_start = start_date if start_date is not None else date(2000, 1, 1)
+    effective_end = end_date if end_date is not None else date(2100, 1, 1)
+
+    created_in_range = [card for card in cards if effective_start <= card.start_date <= effective_end]
     closed_in_range = [
         card
         for card in cards
-        if card.status == "CLOSED" and card.end_date is not None and start_date <= card.end_date <= end_date
+        if card.status == "CLOSED" and card.end_date is not None and effective_start <= card.end_date <= effective_end
     ]
+    closed_cards = [card for card in cards if card.status == "CLOSED"]
+    
     return {
-        "startDate": start_date.isoformat(),
-        "endDate": end_date.isoformat(),
+        "startDate": start_date.isoformat() if start_date else "",
+        "endDate": end_date.isoformat() if end_date else "",
         "openCount": sum(1 for card in cards if card.status == "OPEN"),
-        "closedCount": sum(1 for card in cards if card.status == "CLOSED"),
+        "closedCount": len(closed_cards),
+        "followedPlanCount": sum(1 for card in closed_cards if card.followed_plan is True),
+        "deviatedPlanCount": sum(1 for card in closed_cards if card.followed_plan is False),
         "createdInRangeCount": len(created_in_range),
         "closedInRangeCount": len(closed_in_range),
         "lowDisciplineClosedCount": sum(

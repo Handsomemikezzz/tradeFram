@@ -10,9 +10,14 @@ import {
 } from './types';
 
 export const reviewCardApi = {
+  uploadImage: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post<{ url: string }>('/reviews/upload', formData);
+  },
   createCard: (body: StockReviewCardRequest) => apiClient.post<StockReviewCardResponse>('/reviews/cards', body),
   getCards: (query?: QueryParams) => apiClient.get<PageResponse<StockReviewCardResponse>>('/reviews/cards', query),
-  getSummary: (query: { startDate: string; endDate: string }) => apiClient.get<StockReviewCardSummaryResponse>('/reviews/cards/summary', query),
+  getSummary: (query?: { startDate?: string; endDate?: string }) => apiClient.get<StockReviewCardSummaryResponse>('/reviews/cards/summary', query),
   getCard: (id: string) => apiClient.get<StockReviewCardResponse>(`/reviews/cards/${id}`),
   updateCard: (id: string, body: Partial<StockReviewCardRequest>) => apiClient.patch<StockReviewCardResponse>(`/reviews/cards/${id}`, body),
   deleteCard: (id: string) => apiClient.delete<{ deleted: boolean }>(`/reviews/cards/${id}`),

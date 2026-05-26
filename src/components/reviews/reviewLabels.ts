@@ -33,9 +33,9 @@ export const positionContextLabel: Record<string, string> = {
   HOLDING: '持有中',
 };
 
-export const emotionPresets = ['怕踏空', '急躁', '犹豫', '贪便宜', '想回本', '冷静', '防守'];
-export const problemPresets = ['策略问题', '判断问题', '执行问题', '情绪问题', '仓位问题', '无明显问题'];
-export const sectorPresets = ['商业航天', '半导体', '有色', '风电', '电力', '白酒', '银行'];
+export const emotionPresets = ['怕踏空', '急躁追高', '犹豫不决', '幻想扛单', '冷静执行', '防守空仓', '模式内低吸', '分时冲动'];
+export const problemPresets = ['忽视监管红线', '大盘退潮期强做', '无板块效应硬顶', '吃T+1闷棍', '炸板无纪律死扛', '执行偏差/意念操盘', '仓位失控/满仓赌博', '无明显问题'];
+export const sectorPresets = ['新质生产力', '商业航天', '半导体龙头', '人形机器人', '有色资源', '低空经济', 'AI算力', '高股息红利'];
 
 export const stockReviewStatusLabel: Record<string, string> = {
   OPEN: '进行中',

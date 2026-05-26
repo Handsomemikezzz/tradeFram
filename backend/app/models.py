@@ -272,6 +272,18 @@ class StockReviewCard(Base):
     did_wrong_text: Mapped[str | None] = mapped_column(Text)
     reflection_text: Mapped[str | None] = mapped_column(Text)
     rule_text: Mapped[str | None] = mapped_column(Text)
+    initial_images: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    close_images: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    
+    # Professional Trading Audit Fields
+    strategy_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    expected_rr_ratio: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    stop_loss_target: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pnl_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    r_multiple: Mapped[float | None] = mapped_column(Float, nullable=True)
+    market_regime: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    exit_quality: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
 
@@ -300,6 +312,7 @@ class StockReviewEvent(Base):
     deviated_from_plan: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     emotion_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     problem_tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    images: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
 

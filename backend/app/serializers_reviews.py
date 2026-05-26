@@ -62,6 +62,7 @@ def stock_review_event_payload(event: m.StockReviewEvent) -> dict:
         "deviatedFromPlan": event.deviated_from_plan,
         "emotionTags": _list_payload(event.emotion_tags),
         "problemTags": _list_payload(event.problem_tags),
+        "images": _list_payload(event.images),
         "createdAt": event.created_at.isoformat(),
         "updatedAt": event.updated_at.isoformat(),
     }
@@ -92,6 +93,18 @@ def stock_review_card_payload(card: m.StockReviewCard, *, include_events: bool =
         "didWrongText": card.did_wrong_text,
         "reflectionText": card.reflection_text,
         "ruleText": card.rule_text,
+        "initialImages": _list_payload(card.initial_images),
+        "closeImages": _list_payload(card.close_images),
+        
+        # Professional Trading Audit Fields
+        "strategyType": card.strategy_type,
+        "expectedRrRatio": card.expected_rr_ratio,
+        "stopLossTarget": card.stop_loss_target,
+        "pnlAmount": card.pnl_amount,
+        "rMultiple": card.r_multiple,
+        "marketRegime": card.market_regime,
+        "exitQuality": card.exit_quality,
+
         "createdAt": card.created_at.isoformat(),
         "updatedAt": card.updated_at.isoformat(),
     }
