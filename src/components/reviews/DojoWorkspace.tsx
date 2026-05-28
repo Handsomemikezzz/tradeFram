@@ -99,6 +99,16 @@ export const DojoWorkspace = () => {
     }
   };
 
+  const handleUpdateReflection = async (id: string, payload: any) => {
+    try {
+      await reviewApi.updateEntry(id, payload);
+      await fetchReflections(true);
+    } catch (err) {
+      toast.error('更新说说记录失败');
+      console.error(err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
@@ -146,6 +156,7 @@ export const DojoWorkspace = () => {
             reflections={reflections}
             onAddReflection={handleAddReflection}
             onDeleteReflection={handleDeleteReflection}
+            onUpdateReflection={handleUpdateReflection}
           />
         </div>
       )}

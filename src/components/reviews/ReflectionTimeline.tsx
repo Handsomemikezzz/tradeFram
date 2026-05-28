@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { Lightbulb, ShieldAlert, MessageSquare, Trash2, Calendar, Star, Clock, Plus, HelpCircle, Heart, MessageCircle, Link2 } from 'lucide-react';
 import { ReviewEntryResponse } from '@/services/api/types';
 import { ReflectionForm } from './ReflectionForm';
@@ -18,6 +19,7 @@ interface ReflectionTimelineProps {
     outcomeText?: string | null;
   }) => Promise<void>;
   onDeleteReflection: (id: string) => Promise<void>;
+  onUpdateReflection: (id: string, payload: any) => Promise<void>;
 }
 
 // Simple custom inline markdown parser for bold, italics, and line-breaks
@@ -68,9 +70,20 @@ export const ReflectionTimeline = ({
   reflections,
   onAddReflection,
   onDeleteReflection,
+  onUpdateReflection,
 }: ReflectionTimelineProps) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Likes persistent state (using LocalStorage to avoid backend db changes)
+  const [likedPosts, setLikedPosts] = useState<string[]>(() => {
+    const saved = localStorage.getItem('waytofree_dojo_liked_posts');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Comments interactive states
+  const [activeCommentsPostId, setActiveCommentsPostId] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState('');
 
   const handleAddSubmit = async (payload: any) => {
     await onAddReflection(payload);
@@ -104,6 +117,67 @@ export const ReflectionTimeline = ({
           color: 'text-blue-500 bg-blue-50 border-blue-100',
           title: '📝 随笔感触',
         };
+    }
+  };
+
+  // Likes toggle handler
+  const handleToggleLike = (id: string) => {
+    let nextLiked: string[];
+    if (likedPosts.includes(id)) {
+      nextLiked = likedPosts.filter((x) => x !== id);
+      toast.success('已取消点赞');
+    } else {
+      nextLiked = [...likedPosts, id];
+      toast.success('给你自己的深刻反思点了个赞！👍');
+    }
+    setLikedPosts(nextLiked);
+    localStorage.setItem('waytofree_dojo_liked_posts', JSON.stringify(nextLiked));
+  };
+
+  // Parse comments list stored as JSON string in reflectionText field
+  const parseComments = (reflectionText: string | null): Array<{ id: string; text: string; time: string }> => {
+    if (!reflectionText || reflectionText === '-') return [];
+    try {
+      const parsed = JSON.parse(reflectionText);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  // Add a new comment (persisted to SQLite db)
+  const handleAddComment = async (ref: ReviewEntryResponse) => {
+    if (!commentText.trim()) return;
+
+    const comments = parseComments(ref.reflectionText);
+    const newComment = {
+      id: `cmt-${Date.now()}`,
+      text: commentText.trim(),
+      time: new Date().toISOString().slice(5, 10) + ' ' + new Date().toTimeString().slice(0, 5), // "MM-DD HH:MM"
+    };
+
+    const updatedComments = [...comments, newComment];
+    try {
+      await onUpdateReflection(ref.id, { reflectionText: JSON.stringify(updatedComments) });
+      setCommentText('');
+      toast.success('感悟追加成功！');
+    } catch (err) {
+      toast.error('发表评论失败');
+    }
+  };
+
+  // Delete a comment (persisted to SQLite db)
+  const handleDeleteComment = async (ref: ReviewEntryResponse, commentId: string) => {
+    const comments = parseComments(ref.reflectionText);
+    const updatedComments = comments.filter((c) => c.id !== commentId);
+
+    try {
+      await onUpdateReflection(ref.id, {
+        reflectionText: updatedComments.length > 0 ? JSON.stringify(updatedComments) : '-',
+      });
+      toast.success('追加感悟已撤回');
+    } catch (err) {
+      toast.error('删除评论失败');
     }
   };
 
@@ -149,6 +223,7 @@ export const ReflectionTimeline = ({
             const actionType = ref.sectorTags[0] || '心法顿悟';
             const cat = getCategoryDetails(actionType);
             const isDeleting = confirmDeleteId === ref.id;
+            const commentsList = parseComments(ref.reflectionText);
 
             return (
               <div key={ref.id} className="relative group">
@@ -282,16 +357,93 @@ export const ReflectionTimeline = ({
                       </div>
                     </div>
 
-                    {/* Social icons just for decoration / premium aesthetic */}
-                    <div className="flex items-center gap-3">
-                      <span className="flex items-center gap-1 hover:text-rose-500 transition-colors">
-                        <Heart className="h-3.5 w-3.5" /> 赞
-                      </span>
-                      <span className="flex items-center gap-1 hover:text-blue-500 transition-colors">
-                        <MessageCircle className="h-3.5 w-3.5" /> 评论
-                      </span>
+                    {/* Interactive Likes & Comments Buttons */}
+                    <div className="flex items-center gap-4 select-none">
+                      {/* Like Button */}
+                      <button
+                        onClick={() => handleToggleLike(ref.id)}
+                        className={`flex items-center gap-1 hover:text-rose-600 transition-colors font-semibold ${
+                          likedPosts.includes(ref.id) ? 'text-rose-500' : 'text-slate-400'
+                        }`}
+                      >
+                        <Heart className={`h-3.5 w-3.5 ${likedPosts.includes(ref.id) ? 'fill-rose-500 text-rose-500' : ''}`} />
+                        {likedPosts.includes(ref.id) ? '已赞' : '赞'}
+                      </button>
+
+                      {/* Comment Button */}
+                      <button
+                        onClick={() => {
+                          if (activeCommentsPostId === ref.id) {
+                            setActiveCommentsPostId(null);
+                          } else {
+                            setActiveCommentsPostId(ref.id);
+                            setCommentText('');
+                          }
+                        }}
+                        className={`flex items-center gap-1 hover:text-blue-600 transition-colors font-semibold ${
+                          activeCommentsPostId === ref.id ? 'text-blue-500' : 'text-slate-400'
+                        }`}
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        评论 {commentsList.length > 0 ? `(${commentsList.length})` : ''}
+                      </button>
                     </div>
                   </div>
+
+                  {/* WeChat Moments Style Comments Board */}
+                  {(commentsList.length > 0 || activeCommentsPostId === ref.id) && (
+                    <div className="mt-3.5 rounded-lg bg-slate-50 border border-slate-100 p-3 space-y-2.5 animate-in slide-in-from-top-2 duration-150">
+                      
+                      {/* Historical Comments List */}
+                      {commentsList.length > 0 && (
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1 border-b border-slate-200/40 pb-2.5">
+                          {commentsList.map((cmt) => (
+                            <div key={cmt.id} className="group/cmt flex items-start justify-between gap-3 text-xs leading-relaxed">
+                              <div className="min-w-0 flex-1">
+                                <span className="font-bold text-blue-600 mr-1.5">我 (追加):</span>
+                                <span className="text-slate-700 font-sans tracking-wide">{cmt.text}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 select-none text-[10px] text-slate-400">
+                                <span className="font-mono text-[9px]">{cmt.time}</span>
+                                {/* Hover Delete comment */}
+                                <button
+                                  onClick={() => handleDeleteComment(ref, cmt.id)}
+                                  className="opacity-0 group-hover/cmt:opacity-100 text-slate-400 hover:text-rose-600 p-0.5 rounded transition-all"
+                                  title="撤回该感悟"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Inline Comment Input Box */}
+                      {activeCommentsPostId === ref.id && (
+                        <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            required
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            placeholder="追加日盘后感受、第二天的交易验证..."
+                            className="flex-1 h-8 rounded border border-slate-200 bg-white px-2.5 text-xs outline-none focus:ring-2 focus:ring-blue-100 font-sans"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleAddComment(ref);
+                            }}
+                          />
+                          <button
+                            onClick={() => handleAddComment(ref)}
+                            className="h-8 rounded bg-blue-600 px-3.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors"
+                          >
+                            发送
+                          </button>
+                        </div>
+                      )}
+
+                    </div>
+                  )}
 
                 </div>
               </div>
