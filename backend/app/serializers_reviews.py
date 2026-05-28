@@ -111,3 +111,14 @@ def stock_review_card_payload(card: m.StockReviewCard, *, include_events: bool =
     if include_events:
         payload["events"] = [stock_review_event_payload(event) for event in card.events]
     return payload
+
+
+def iron_law_payload(law: m.IronLaw) -> dict:
+    return {
+        "id": law.id,
+        "text": law.text,
+        "tag": law.tag,
+        "status": law.status,
+        "createdAt": law.created_at.isoformat(),
+        "updatedAt": law.updated_at.isoformat(),
+    }

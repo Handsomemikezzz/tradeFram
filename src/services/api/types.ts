@@ -661,3 +661,15 @@ export interface LogResponse {
   runId: string | null;
   traceId: string | null;
 }
+
+export interface IronLawRequest {
+  text: string;
+  tag: string;
+  status: 'COMPLIANT' | 'CHALLENGED' | 'VIOLATED';
+}
+
+export interface IronLawResponse extends IronLawRequest {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -497,3 +497,14 @@ class DataSourceHealth(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     last_checked_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class IronLaw(Base):
+    __tablename__ = "iron_laws"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    tag: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="COMPLIANT")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)

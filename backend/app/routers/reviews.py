@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..schemas import (
+    IronLawCreate,
+    IronLawUpdate,
     ReviewEntryCreate,
     ReviewEntryUpdate,
     StockReviewCardClose,
@@ -16,7 +18,7 @@ from ..schemas import (
     StockReviewEventUpdate,
     WeeklyReviewUpdate,
 )
-from ..serializers_reviews import review_entry_payload, stock_review_card_payload, stock_review_event_payload, weekly_review_payload
+from ..serializers_reviews import iron_law_payload, review_entry_payload, stock_review_card_payload, stock_review_event_payload, weekly_review_payload
 from ..services.reviews import (
     create_review_entry,
     create_stock_review_card,
@@ -203,3 +205,72 @@ def get_review_week(week_start: date, db: Session = Depends(get_db)):
 @router.put("/reviews/weeks/{week_start}")
 def put_review_week(week_start: date, payload: WeeklyReviewUpdate, db: Session = Depends(get_db)):
     return ok(weekly_review_payload(save_weekly_review(db, week_start, payload)))
+
+
+from .. import models as m
+from ..utils import new_id, api_error
+
+@router.get("/reviews/iron-laws")
+def get_iron_laws(db: Session = Depends(get_db)):
+    laws = db.query(m.IronLaw).order_by(m.IronLaw.created_at.desc()).all()
+    # Auto-seed defaults if database table is empty for a premium out-of-the-box experience
+    if len(laws) == 0:
+        default_rules = [
+            ("绝对不在上午 10:00 前情绪化急躁满仓", "急躁"),
+            ("严格执行止损计划，绝不因为亏损产生幻想而抗单", "抗单"),
+            ("绝不追高非主流板块的跟风股，只做核心龙头", "追高"),
+            ("买入逻辑不充分、市场环境不明朗时，绝不随意交易", "随意交易"),
+        ]
+        for idx, (text, tag) in enumerate(default_rules):
+            law = m.IronLaw(
+                id=f"law-{1000 + idx}",
+                text=text,
+                tag=tag,
+                status="COMPLIANT",
+            )
+            db.add(law)
+        db.commit()
+        laws = db.query(m.IronLaw).order_by(m.IronLaw.created_at.desc()).all()
+    
+    return ok({"items": [iron_law_payload(law) for law in laws]})
+
+
+@router.post("/reviews/iron-laws")
+def post_iron_law(payload: IronLawCreate, db: Session = Depends(get_db)):
+    law = m.IronLaw(
+        id=new_id("law"),
+        text=payload.text,
+        tag=payload.tag,
+        status=payload.status,
+    )
+    db.add(law)
+    db.commit()
+    db.refresh(law)
+    return ok(iron_law_payload(law))
+
+
+@router.patch("/reviews/iron-laws/{law_id}")
+def patch_iron_law(law_id: str, payload: IronLawUpdate, db: Session = Depends(get_db)):
+    law = db.get(m.IronLaw, law_id)
+    if not law:
+        raise api_error(404, "IRON_LAW_NOT_FOUND", f"铁律规则 {law_id} 不存在")
+    
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(law, key, value)
+    
+    law.updated_at = m.now_utc()
+    db.commit()
+    db.refresh(law)
+    return ok(iron_law_payload(law))
+
+
+@router.delete("/reviews/iron-laws/{law_id}")
+def remove_iron_law(law_id: str, db: Session = Depends(get_db)):
+    law = db.get(m.IronLaw, law_id)
+    if not law:
+        raise api_error(404, "IRON_LAW_NOT_FOUND", f"铁律规则 {law_id} 不存在")
+    
+    db.delete(law)
+    db.commit()
+    return ok({"deleted": True})

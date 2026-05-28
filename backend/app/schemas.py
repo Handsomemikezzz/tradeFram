@@ -414,3 +414,15 @@ class StockReviewCardClose(BaseModel):
         if value > date.today():
             raise ValueError("endDate cannot be in the future")
         return value
+
+
+class IronLawCreate(BaseModel):
+    text: str = Field(..., min_length=1)
+    tag: str = Field(..., min_length=1)
+    status: Literal["COMPLIANT", "CHALLENGED", "VIOLATED"] = "COMPLIANT"
+
+
+class IronLawUpdate(BaseModel):
+    text: str | None = Field(default=None, min_length=1)
+    tag: str | None = Field(default=None, min_length=1)
+    status: Literal["COMPLIANT", "CHALLENGED", "VIOLATED"] | None = None
