@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StockReviewEventRequest, StockReviewEventType } from '@/services/api';
@@ -12,13 +12,38 @@ const textareaClass = 'min-h-16 rounded border border-gray-200 bg-white px-3 py-
 
 interface EventFormProps {
   onSubmit: (payload: StockReviewEventRequest) => Promise<void>;
+  defaultType?: StockReviewEventType;
+  isClosedCard?: boolean;
 }
 
-export const EventForm = ({ onSubmit }: EventFormProps) => {
+// 专为已结出（CLOSED）卡片定制的“卖出后跟踪/反思”心理与诊断预设标签
+const postExitEmotionPresets = [
+  '卖早踏空/后悔心切',
+  '完美逃顶/轻松欣慰',
+  '认知偏差纠正',
+  '卖出无悔/知足常乐',
+  '平心静气/客观跟踪',
+  '等待重新建仓机会',
+  '心如止水',
+  '情绪化随手卖/遗憾'
+];
+
+const postExitQualityPresets = [
+  '出局节奏完美 🏆',
+  '踏空/卖早/恐慌交筹码 ⚠️',
+  '扛单/割肉太迟/幻想反弹 ❌',
+  '防守止损及时/避免深套 ✅',
+  '利润保护/按计划分批落袋',
+  '随手乱卖/情绪操盘',
+  '超出认知大涨 📈',
+  '超出认知大跌 📉'
+];
+
+export const EventForm = ({ onSubmit, defaultType = 'HOLD', isClosedCard = false }: EventFormProps) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [eventDate, setEventDate] = useState(today());
-  const [eventType, setEventType] = useState<StockReviewEventType>('HOLD');
+  const [eventType, setEventType] = useState<StockReviewEventType>(defaultType);
   const [reasonText, setReasonText] = useState('');
   const [positionSnapshot, setPositionSnapshot] = useState('');
   const [deviatedFromPlan, setDeviatedFromPlan] = useState(false);
@@ -26,9 +51,13 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
   const [problemTags, setProblemTags] = useState<string[]>([]);
   const [images, setImages] = useState<string[]>([]);
 
+  useEffect(() => {
+    setEventType(defaultType);
+  }, [defaultType]);
+
   const reset = () => {
     setEventDate(today());
-    setEventType('HOLD');
+    setEventType(defaultType);
     setReasonText('');
     setPositionSnapshot('');
     setDeviatedFromPlan(false);
@@ -46,9 +75,9 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
       await onSubmit({
         eventDate,
         eventType,
-        title: stockReviewEventTypeLabel[eventType] || eventType,
+        title: isClosedCard ? '跟盘反思' : (stockReviewEventTypeLabel[eventType] || eventType),
         reasonText,
-        positionSnapshot: positionSnapshot.trim() || null,
+        positionSnapshot: isClosedCard ? '0' : (positionSnapshot.trim() || null), // 结出后仓位归零
         deviatedFromPlan,
         emotionTags,
         problemTags,
@@ -75,7 +104,7 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
 
   return (
     <form className="space-y-4" onSubmit={submit}>
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50/30 p-4 rounded-xl border border-slate-100">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center bg-slate-50/30 p-4 rounded-xl border border-slate-100">
         <label className="space-y-1.5 md:col-span-3 flex flex-col">
           <span className="text-[11px] font-bold text-slate-500">记录日期</span>
           <Input 
@@ -88,86 +117,97 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
           />
         </label>
         
-        <div className="flex flex-col space-y-1.5 md:col-span-9">
-          <span className="text-[11px] font-bold text-slate-500">事件类型</span>
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-1.5">
-            {Object.entries(stockReviewEventTypeLabel).map(([value, label]) => {
-              const itemValue = value as StockReviewEventType;
-              const active = eventType === itemValue;
-              const config = typeConfigs[itemValue] || { label, activeClass: 'bg-slate-100 border-slate-500 text-slate-800' };
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setEventType(itemValue)}
-                  className={`py-2 px-1 rounded-lg border text-center text-[12px] font-semibold transition-all duration-200 ${
-                    active 
-                      ? config.activeClass 
-                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
-                  }`}
-                >
-                  {config.label}
-                </button>
-              );
-            })}
+        {isClosedCard ? (
+          <div className="flex flex-col space-y-1.5 md:col-span-9">
+            <span className="text-[11px] font-bold text-slate-500">记录类型</span>
+            <div className="flex items-center h-10 px-3 bg-white rounded-lg border border-slate-200 text-[12px] font-bold text-violet-700">
+              <span className="mr-2">📝</span> 观察记录 / 卖出后跟盘反思
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col space-y-1.5 md:col-span-9">
+            <span className="text-[11px] font-bold text-slate-500">事件类型</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-1.5">
+              {Object.entries(stockReviewEventTypeLabel).map(([value, label]) => {
+                const itemValue = value as StockReviewEventType;
+                const active = eventType === itemValue;
+                const config = typeConfigs[itemValue] || { label, activeClass: 'bg-slate-100 border-slate-500 text-slate-800' };
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setEventType(itemValue)}
+                    className={`py-2 px-1 rounded-lg border text-center text-[12px] font-semibold transition-all duration-200 ${
+                      active 
+                        ? config.activeClass 
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
+                    }`}
+                  >
+                    {config.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="group rounded-xl border border-slate-200 bg-slate-50/30 p-4 transition-all duration-300 hover:shadow-md hover:bg-white focus-within:border-slate-800 focus-within:ring-4 focus-within:ring-slate-100 lg:col-span-2">
+        <div className={`group rounded-xl border border-slate-200 bg-slate-50/30 p-4 transition-all duration-300 hover:shadow-md hover:bg-white focus-within:border-slate-800 focus-within:ring-4 focus-within:ring-slate-100 ${isClosedCard ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
           <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
             <span className="text-[12px] font-semibold text-slate-800 flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-              过程记录理由 <span className="text-[10px] text-rose-500 font-bold">*</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${isClosedCard ? 'bg-violet-500 animate-pulse' : 'bg-blue-500'}`} />
+              {isClosedCard ? '跟盘走势与预期对比' : '过程记录理由'} <span className="text-[10px] text-rose-500 font-bold">*</span>
             </span>
-            <span className="text-[9px] text-slate-400 font-mono tracking-wider uppercase">REASON / MEMO</span>
+            <span className="text-[9px] text-slate-400 font-mono tracking-wider uppercase">{isClosedCard ? 'EXPECTATION / CALIBRATION' : 'REASON / MEMO'}</span>
           </div>
           <textarea
             className="w-full bg-transparent border-0 p-0 text-[13px] text-slate-800 placeholder:text-slate-400 focus:ring-0 focus:outline-none min-h-20 resize-none leading-relaxed"
             value={reasonText}
-            placeholder="请详尽说明当时市场环境、个股走势、你的情绪状态以及买入/加仓/观察的依据。"
+            placeholder={isClosedCard ? '请详尽记录卖出后的个股实际走势，与你的卖出预期进行深度对比。例如：卖出后个股破位大跌，证明出局策略及时；或个股放量突破继续大涨，反思是否低估了题材热度并总结原因。' : '请详尽说明当时市场环境、个股走势、你的情绪状态以及买入/加仓/观察的依据。'}
             onChange={(event) => setReasonText(event.target.value)}
             required
           />
         </div>
 
-        <div className="group rounded-xl border border-slate-200 bg-slate-50/30 p-4 transition-all duration-300 hover:shadow-md hover:bg-white focus-within:border-slate-800 focus-within:ring-4 focus-within:ring-slate-100">
-          <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
-            <span className="text-[12px] font-semibold text-slate-800 flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              仓位快照
-            </span>
-            <span className="text-[9px] text-slate-400 font-mono tracking-wider uppercase">SNAPSHOT</span>
+        {!isClosedCard && (
+          <div className="group rounded-xl border border-slate-200 bg-slate-50/30 p-4 transition-all duration-300 hover:shadow-md hover:bg-white focus-within:border-slate-800 focus-within:ring-4 focus-within:ring-slate-100">
+            <div className="mb-2 flex items-center justify-between border-b border-slate-100 pb-1.5">
+              <span className="text-[12px] font-semibold text-slate-800 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                仓位快照
+              </span>
+              <span className="text-[9px] text-slate-400 font-mono tracking-wider uppercase">SNAPSHOT</span>
+            </div>
+            <textarea
+              className="w-full bg-transparent border-0 p-0 text-[13px] text-slate-800 placeholder:text-slate-400 focus:ring-0 focus:outline-none min-h-20 resize-none leading-relaxed"
+              value={positionSnapshot}
+              placeholder="例：半仓持有，浮盈 3%，持仓成本线位于支撑位上方。"
+              onChange={(event) => setPositionSnapshot(event.target.value)}
+            />
           </div>
-          <textarea
-            className="w-full bg-transparent border-0 p-0 text-[13px] text-slate-800 placeholder:text-slate-400 focus:ring-0 focus:outline-none min-h-20 resize-none leading-relaxed"
-            value={positionSnapshot}
-            placeholder="例：半仓持有，浮盈 3%，持仓成本线位于支撑位上方。"
-            onChange={(event) => setPositionSnapshot(event.target.value)}
-          />
-        </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-1.5">
-            <span className="text-[12px] font-semibold text-slate-800">过程情绪</span>
-            <span className="text-[9px] text-slate-400 font-mono">EMOTIONS</span>
+            <span className="text-[12px] font-semibold text-slate-800">{isClosedCard ? '卖出后心境' : '过程情绪'}</span>
+            <span className="text-[9px] text-slate-400 font-mono">{isClosedCard ? 'POST-EXIT PSYCHOLOGY' : 'EMOTIONS'}</span>
           </div>
-          <MultiTagInput value={emotionTags} presets={emotionPresets} placeholder="输入情绪标签" onChange={setEmotionTags} />
+          <MultiTagInput value={emotionTags} presets={isClosedCard ? postExitEmotionPresets : emotionPresets} placeholder={isClosedCard ? '输入卖出后的心理或偏差标签' : '输入情绪标签'} onChange={setEmotionTags} />
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
           <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-1.5">
-            <span className="text-[12px] font-semibold text-slate-800">发现问题</span>
-            <span className="text-[9px] text-slate-400 font-mono">PROBLEMS</span>
+            <span className="text-[12px] font-semibold text-slate-800">{isClosedCard ? '卖出执行质量评价' : '发现问题'}</span>
+            <span className="text-[9px] text-slate-400 font-mono">{isClosedCard ? 'EXIT QUALITY DIAGNOSIS' : 'PROBLEMS'}</span>
           </div>
-          <MultiTagInput value={problemTags} presets={problemPresets} placeholder="输入发现的问题标签" onChange={setProblemTags} />
+          <MultiTagInput value={problemTags} presets={isClosedCard ? postExitQualityPresets : problemPresets} placeholder={isClosedCard ? '输入卖出执行质量评价标签' : '输入发现的问题标签'} onChange={setProblemTags} />
         </div>
       </div>
 
       <div className="pt-3 border-t border-slate-100">
-        <MultiImageUpload images={images} onChange={setImages} label="过程走势图表 (支持拖拽/多图上传)" />
+        <MultiImageUpload images={images} onChange={setImages} label={isClosedCard ? "跟盘走势图表 (支持拖拽/多图上传)" : "过程走势图表 (支持拖拽/多图上传)"} />
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-3 border-t border-slate-100">
@@ -176,22 +216,26 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
             onClick={() => setDeviatedFromPlan(!deviatedFromPlan)}
             className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all duration-300 cursor-pointer select-none ${
               deviatedFromPlan 
-                ? 'bg-rose-50 border-rose-400 text-rose-800 shadow-sm ring-2 ring-rose-100' 
+                ? isClosedCard
+                  ? 'bg-amber-50 border-amber-400 text-amber-800 shadow-sm ring-2 ring-amber-100'
+                  : 'bg-rose-50 border-rose-400 text-rose-800 shadow-sm ring-2 ring-rose-100' 
                 : 'bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
           >
             <div className="flex items-center gap-2.5">
-              <span className={`h-2 w-2 rounded-full ${deviatedFromPlan ? 'bg-rose-500 animate-pulse' : 'bg-slate-400'}`} />
+              <span className={`h-2 w-2 rounded-full ${deviatedFromPlan ? isClosedCard ? 'bg-amber-500 animate-pulse' : 'bg-rose-500 animate-pulse' : 'bg-slate-400'}`} />
               <div>
-                <div className="text-[12px] font-bold">是否偏离原计划</div>
-                <div className="text-[9px] text-slate-400 mt-0.5">偏离买入时设定的止损止盈或操作节奏</div>
+                <div className="text-[12px] font-bold">{isClosedCard ? '后续走势是否偏离预期' : '是否偏离原计划'}</div>
+                <div className="text-[9px] text-slate-400 mt-0.5">{isClosedCard ? '后续实际走势严重超预期，或走势特征与卖出假设背离' : '偏离买入时设定的止损止盈或操作节奏'}</div>
               </div>
             </div>
             <div className="flex items-center">
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                deviatedFromPlan ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-600'
+                deviatedFromPlan 
+                  ? isClosedCard ? 'bg-amber-600 text-white' : 'bg-rose-600 text-white' 
+                  : 'bg-slate-200 text-slate-600'
               }`}>
-                {deviatedFromPlan ? '⚠️ 偏离计划' : '✅ 遵守计划'}
+                {deviatedFromPlan ? isClosedCard ? '⚠️ 偏离预期' : '⚠️ 偏离计划' : isClosedCard ? '✅ 符合预期' : '✅ 遵守计划'}
               </span>
             </div>
           </div>
@@ -204,7 +248,7 @@ export const EventForm = ({ onSubmit }: EventFormProps) => {
             disabled={submitting} 
             className="h-10 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] font-bold px-6 shadow-md transition-all hover:scale-[1.02] active:scale-[0.98] w-full sm:w-auto"
           >
-            {submitting ? '保存中...' : '记录过程事件'}
+            {submitting ? '保存中...' : isClosedCard ? '保存跟盘反思' : '记录过程事件'}
           </Button>
         </div>
       </div>

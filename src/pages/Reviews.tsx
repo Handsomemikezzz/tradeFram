@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CardDetail } from '@/components/reviews/CardDetail';
 import { CardForm } from '@/components/reviews/CardForm';
 import { CardList } from '@/components/reviews/CardList';
+import { DojoWorkspace } from '@/components/reviews/DojoWorkspace';
 import {
   ApiClientError,
   reviewCardApi,
@@ -48,6 +49,10 @@ export default function Reviews() {
   const [status, setStatus] = useState<ReviewStatusFilter>('OPEN');
   const [keyword, setKeyword] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [openEventForm, setOpenEventForm] = useState(false);
+  const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'CARDS' | 'DOJO'>('CARDS');
 
   const load = async (preferredSelectedId = selectedId, statusFilter = status) => {
     let apiStatus: StockReviewCardStatus | 'ALL' | undefined;
@@ -94,8 +99,10 @@ export default function Reviews() {
   };
 
   useEffect(() => {
-    load().catch((err: Error) => toast.error(err.message));
-  }, [status]);
+    if (activeTab === 'CARDS') {
+      load().catch((err: Error) => toast.error(err.message));
+    }
+  }, [status, activeTab]);
 
   useEffect(() => {
     if (!selectedCard) return;
@@ -120,19 +127,30 @@ export default function Reviews() {
     await load();
   };
 
-  const selectCard = async (id: string) => {
+  const selectCard = async (id: string, options?: { openEventForm?: boolean }) => {
+    if (!options?.openEventForm) {
+      setOpenEventForm(false);
+    }
+    setLoadingCardId(id);
     try {
       const detail = await reviewCardApi.getCard(id);
       setSelectedId(id);
       setSelectedCard(detail);
+      if (options?.openEventForm) {
+        setOpenEventForm(true);
+      }
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'REVIEW_CARD_NOT_FOUND') {
         await handleMissingCard();
         return;
       }
       toast.error(err instanceof Error ? err.message : '加载卡片详情失败');
+    } finally {
+      setLoadingCardId(null);
     }
   };
+
+  const selectCardAndOpenEventForm = (id: string) => selectCard(id, { openEventForm: true });
 
   const addEvent = async (cardId: string, payload: StockReviewEventRequest) => {
     try {
@@ -196,92 +214,143 @@ export default function Reviews() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <BookOpenCheck className="w-6 h-6" />
+            <BookOpenCheck className="w-6 h-6 animate-pulse" />
             交易复盘
           </h2>
-          <p className="text-muted-foreground text-sm mt-1">为每只股票建立一张复盘卡片，记录买入逻辑、持有过程、卖出结果和纪律反思。</p>
+          <p className="text-muted-foreground text-sm mt-1">记录买入逻辑、持有过程、交易心法、遵守纪律和深度反思。</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Metric
-          label="进行中"
-          value={summary?.openCount ?? 0}
-          tone="sky"
-          active={status === 'OPEN'}
-          onClick={() => setStatus('OPEN')}
-        />
-        <Metric
-          label="已结束"
-          value={summary?.closedCount ?? 0}
-          tone="slate"
-          active={status === 'CLOSED'}
-          onClick={() => setStatus('CLOSED')}
-        />
-        <Metric
-          label="遵守计划"
-          value={summary?.followedPlanCount ?? 0}
-          tone="emerald"
-          active={status === 'FOLLOWED'}
-          onClick={() => setStatus('FOLLOWED')}
-        />
-        <Metric
-          label="偏离计划"
-          value={summary?.deviatedPlanCount ?? 0}
-          tone="amber"
-          active={status === 'DEVIATED'}
-          onClick={() => setStatus('DEVIATED')}
-        />
+      {/* Premium Tab Bar Selector */}
+      <div className="flex border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('CARDS')}
+          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
+            activeTab === 'CARDS'
+              ? 'border-blue-600 text-blue-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-900 hover:border-slate-300'
+          }`}
+        >
+          标的个案复盘 (Stock Case Reviews)
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('DOJO')}
+          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 ${
+            activeTab === 'DOJO'
+              ? 'border-blue-600 text-blue-600 font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-900 hover:border-slate-300'
+          }`}
+        >
+          <span>心法与交易纪律 (Trader's Dojo)</span>
+          <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 ring-1 ring-inset ring-blue-700/10">
+            修炼
+          </span>
+        </button>
       </div>
 
-      <Card className="rounded-lg border-slate-200 bg-white shadow-sm">
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-[14px] font-semibold text-slate-950">新建标的复盘</CardTitle>
-            </div>
-            <button
-              type="button"
-              onClick={() => setCreateOpen((open) => !open)}
-              className={createOpen
-                ? 'inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50'
-                : 'inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-slate-800'}
-            >
-              {createOpen ? <ChevronDown className="h-4 w-4 rotate-180 transition-transform" /> : <Plus className="h-4 w-4" />}
-              {createOpen ? '收起' : '创建新复盘'}
-            </button>
+      {activeTab === 'CARDS' ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <Metric
+              label="进行中"
+              value={summary?.openCount ?? 0}
+              tone="sky"
+              active={status === 'OPEN'}
+              onClick={() => setStatus('OPEN')}
+            />
+            <Metric
+              label="已结束"
+              value={summary?.closedCount ?? 0}
+              tone="slate"
+              active={status === 'CLOSED'}
+              onClick={() => setStatus('CLOSED')}
+            />
+            <Metric
+              label="遵守计划"
+              value={summary?.followedPlanCount ?? 0}
+              tone="emerald"
+              active={status === 'FOLLOWED'}
+              onClick={() => setStatus('FOLLOWED')}
+            />
+            <Metric
+              label="偏离计划"
+              value={summary?.deviatedPlanCount ?? 0}
+              tone="amber"
+              active={status === 'DEVIATED'}
+              onClick={() => setStatus('DEVIATED')}
+            />
           </div>
-        </CardHeader>
-        {createOpen && (
-          <CardContent className="border-t border-slate-100 bg-slate-50/40 pt-4">
-            <CardForm onSubmit={createCard} />
-          </CardContent>
-        )}
-      </Card>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <select value={status} onChange={(event) => setStatus(event.target.value as ReviewStatusFilter)} className="h-8 rounded border border-gray-200 bg-white px-2 text-[11px]">
-          <option value="OPEN">进行中</option>
-          <option value="CLOSED">已结束</option>
-          <option value="FOLLOWED">遵守计划 (已结束)</option>
-          <option value="DEVIATED">偏离计划 (已结束)</option>
-          <option value="ALL">全部</option>
-        </select>
-        <input
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') load().catch((err: Error) => toast.error(err.message));
-          }}
-          placeholder="搜索代码或名称"
-          className="h-8 w-56 rounded border border-gray-200 bg-white px-2 text-[11px]"
-        />
-      </div>
+          <Card className="rounded-lg border-slate-200 bg-white shadow-sm animate-in fade-in duration-300">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-[14px] font-semibold text-slate-950">新建标的复盘</CardTitle>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen((open) => !open)}
+                  className={createOpen
+                    ? 'inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50'
+                    : 'inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-[13px] font-semibold text-white shadow-sm transition hover:bg-slate-800'}
+                >
+                  {createOpen ? <ChevronDown className="h-4 w-4 rotate-180 transition-transform" /> : <Plus className="h-4 w-4" />}
+                  {createOpen ? '收起' : '创建新复盘'}
+                </button>
+              </div>
+            </CardHeader>
+            {createOpen && (
+              <CardContent className="border-t border-slate-100 bg-slate-50/40 pt-4">
+                <CardForm onSubmit={createCard} />
+              </CardContent>
+            )}
+          </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,360px)_1fr] gap-4 items-start">
-        <CardList cards={cards} selectedId={selectedId} onSelect={selectCard} />
-        <CardDetail card={selectedCard} onAddEvent={addEvent} onClose={closeCard} onReopen={reopenCard} onDelete={deleteCard} />
-      </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={status} onChange={(event) => setStatus(event.target.value as ReviewStatusFilter)} className="h-8 rounded border border-gray-200 bg-white px-2 text-[11px]">
+              <option value="OPEN">进行中</option>
+              <option value="CLOSED">已结束</option>
+              <option value="FOLLOWED">遵守计划 (已结束)</option>
+              <option value="DEVIATED">偏离计划 (已结束)</option>
+              <option value="ALL">全部</option>
+            </select>
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') load().catch((err: Error) => toast.error(err.message));
+              }}
+              placeholder="搜索代码或名称"
+              className="h-8 w-56 rounded border border-gray-200 bg-white px-2 text-[11px]"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,360px)_1fr] gap-4 items-start animate-in fade-in duration-300">
+            <CardList
+              cards={cards}
+              selectedId={selectedId}
+              loadingCardId={loadingCardId}
+              onSelect={selectCard}
+              onRequestAddEvent={selectCardAndOpenEventForm}
+            />
+            <CardDetail
+              card={selectedCard}
+              openEventForm={openEventForm}
+              onEventFormConsumed={() => setOpenEventForm(false)}
+              onAddEvent={addEvent}
+              onClose={closeCard}
+              onReopen={reopenCard}
+              onDelete={deleteCard}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="animate-in fade-in duration-300">
+          <DojoWorkspace />
+        </div>
+      )}
     </div>
   );
 }

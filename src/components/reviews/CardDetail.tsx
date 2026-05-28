@@ -32,6 +32,8 @@ const textareaClass = 'min-h-16 rounded border border-gray-200 bg-white px-3 py-
 
 interface CardDetailProps {
   card: StockReviewCardResponse | null;
+  openEventForm?: boolean;
+  onEventFormConsumed?: () => void;
   onAddEvent: (cardId: string, payload: StockReviewEventRequest) => Promise<void>;
   onClose: (cardId: string, payload: StockReviewCardCloseRequest) => Promise<void>;
   onReopen: (cardId: string) => Promise<void>;
@@ -67,9 +69,11 @@ const TagList = ({ tags }: { tags: string[] }) => {
   );
 };
 
-export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: CardDetailProps) => {
+export const CardDetail = ({ card, openEventForm, onEventFormConsumed, onAddEvent, onClose, onReopen, onDelete }: CardDetailProps) => {
   const [reopening, setReopening] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [planExpanded, setPlanExpanded] = useState(false);
@@ -83,10 +87,31 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: Ca
   useEffect(() => {
     setReopenError(null);
     setDeleteError(null);
+    setDeleteArmed(false);
+    setDeleteConfirmText('');
     setPlanExpanded(false);
     setActiveForm(null);
     setCloseRecordExpanded(true);
   }, [card?.id]);
+
+  useEffect(() => {
+    if (!openEventForm || !card) return;
+    setActiveForm('event');
+    onEventFormConsumed?.();
+  }, [openEventForm, card?.id, onEventFormConsumed]);
+
+  useEffect(() => {
+    if (!deleteArmed) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDeleteArmed(false);
+        setDeleteConfirmText('');
+        setDeleteError(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [deleteArmed]);
 
   if (!card) {
     return (
@@ -125,16 +150,25 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: Ca
     setActiveForm(null);
   };
 
+  const deleteConfirmPhrase = (card.code || card.name || '确认删除').trim();
+  const deleteConfirmMatches =
+    deleteConfirmPhrase.length > 0 &&
+    deleteConfirmText.trim().toLowerCase() === deleteConfirmPhrase.toLowerCase();
+
+  const cancelDelete = () => {
+    setDeleteArmed(false);
+    setDeleteConfirmText('');
+    setDeleteError(null);
+  };
+
   const deleteCard = async () => {
-    const label = `${card.code || '-'} ${displayName(card)}`;
-    if (!window.confirm(`确定删除「${label}」的复盘卡片？\n删除后不可恢复，关联的过程事件也会一并删除。`)) {
-      return;
-    }
+    if (!deleteConfirmMatches) return;
 
     setDeleteError(null);
     setDeleting(true);
     try {
       await onDelete(card.id);
+      cancelDelete();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : '删除失败');
     } finally {
@@ -215,15 +249,32 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: Ca
                   {stockReviewStatusLabel[card.status] || card.status}
                 </Badge>
                 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={deleting}
-                  onClick={deleteCard}
-                  className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {!deleteArmed ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={deleting}
+                    title="删除复盘卡片（需二次确认）"
+                    aria-label="删除复盘卡片"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleteArmed(true);
+                    }}
+                    className="h-7 w-7 p-0 text-slate-300 hover:text-slate-400 hover:bg-slate-50 rounded"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={deleting}
+                    onClick={cancelDelete}
+                    className="h-7 px-2 text-[10px] text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded"
+                  >
+                    取消
+                  </Button>
+                )}
               </div>
               
               <div className="font-mono text-[10px] text-slate-400 leading-tight">
@@ -232,6 +283,69 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: Ca
               </div>
             </div>
           </div>
+
+          {deleteArmed && (
+            <div
+              className="rounded-lg border border-rose-100 bg-rose-50/40 p-3 space-y-2"
+              role="alertdialog"
+              aria-labelledby="delete-card-title"
+              aria-describedby="delete-card-desc"
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500 mt-0.5" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div>
+                    <p id="delete-card-title" className="text-[11px] font-bold text-rose-800">
+                      确认删除复盘卡片？
+                    </p>
+                    <p id="delete-card-desc" className="mt-1 text-[10px] leading-5 text-rose-700/90">
+                      删除后不可恢复，关联的过程事件也会一并删除。请在下方输入
+                      <span className="mx-1 font-mono font-bold text-rose-900">{deleteConfirmPhrase}</span>
+                      以继续。
+                    </p>
+                  </div>
+                  <Input
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder={`输入 ${deleteConfirmPhrase}`}
+                    autoFocus
+                    disabled={deleting}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && deleteConfirmMatches && !deleting) {
+                        e.preventDefault();
+                        deleteCard();
+                      }
+                    }}
+                    className="h-8 text-[11px] font-mono bg-white border-rose-200 focus-visible:ring-rose-200"
+                    aria-label="删除确认输入"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      disabled={deleting}
+                      onClick={cancelDelete}
+                      className="h-7 text-[10px]"
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="xs"
+                      disabled={!deleteConfirmMatches || deleting}
+                      onClick={deleteCard}
+                      className="h-7 text-[10px]"
+                    >
+                      {deleting ? '删除中…' : '永久删除'}
+                    </Button>
+                  </div>
+                  {deleteError && <p className="text-[10px] text-red-600">{deleteError}</p>}
+                </div>
+              </div>
+            </div>
+          )}
         </CardHeader>
 
         <CardContent className="space-y-4 p-5 pt-0">
@@ -293,7 +407,7 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: Ca
             )}
           </div>
 
-          {/* Open-state Form Buttons */}
+          {/* Form action buttons — always visible, no expand required */}
           {deleteError && <div className="text-[11px] text-red-600">{deleteError}</div>}
           {card.status === 'OPEN' && (
             <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3.5">
@@ -317,16 +431,37 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: Ca
               </Button>
             </div>
           )}
+          {card.status === 'CLOSED' && (
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3.5">
+              <Button
+                type="button"
+                variant={activeForm === 'event' ? 'default' : 'outline'}
+                onClick={() => setActiveForm(activeForm === 'event' ? null : 'event')}
+                className="h-8 gap-1.5 text-[10px] font-bold uppercase tracking-widest transition"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {activeForm === 'event' ? '收起反思表单' : '追加卖出后跟盘/反思'}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* 2. Interactive Forms */}
-      {card.status === 'OPEN' && activeForm === 'event' && (
+      {activeForm === 'event' && (
         <Card className="rounded-lg border-slate-200 bg-white shadow-sm overflow-hidden">
           <CardHeader className="bg-slate-50/50 p-4 border-b border-slate-100">
-            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">追加交易过程事件</CardTitle>
+            <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              {card.status === 'CLOSED' ? '追加卖出后跟盘 / 复盘反思记录' : '追加交易过程事件'}
+            </CardTitle>
           </CardHeader>
-          <CardContent className="p-4"><EventForm onSubmit={addEvent} /></CardContent>
+          <CardContent className="p-4">
+            <EventForm 
+              onSubmit={addEvent} 
+              defaultType={card.status === 'CLOSED' ? 'OBSERVATION' : 'HOLD'} 
+              isClosedCard={card.status === 'CLOSED'}
+            />
+          </CardContent>
         </Card>
       )}
 
@@ -590,6 +725,7 @@ export const CardDetail = ({ card, onAddEvent, onClose, onReopen, onDelete }: Ca
                   {card.ruleText || '铁律还未归纳，每次复盘至少沉淀一条可以固化执行的交易规则。'}
                 </p>
               </div>
+
             </CardContent>
           )}
         </Card>

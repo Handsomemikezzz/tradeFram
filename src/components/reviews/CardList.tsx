@@ -1,5 +1,7 @@
 import React from 'react';
+import { Loader2, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { StockReviewCardResponse } from '@/services/api';
 import { stockReviewStatusLabel } from './reviewLabels';
@@ -7,7 +9,9 @@ import { stockReviewStatusLabel } from './reviewLabels';
 interface CardListProps {
   cards: StockReviewCardResponse[];
   selectedId: string | null;
+  loadingCardId?: string | null;
   onSelect: (id: string) => void;
+  onRequestAddEvent?: (id: string) => void;
 }
 
 function durationDays(card: StockReviewCardResponse) {
@@ -21,7 +25,7 @@ function displayName(card: StockReviewCardResponse) {
   return card.name || card.sectorTags.join(' / ') || '-';
 }
 
-export const CardList = ({ cards, selectedId, onSelect }: CardListProps) => (
+export const CardList = ({ cards, selectedId, loadingCardId, onSelect, onRequestAddEvent }: CardListProps) => (
   <div className="space-y-2">
     {cards.length === 0 && (
       <Card className="rounded-lg border-gray-200 bg-white">
@@ -32,9 +36,15 @@ export const CardList = ({ cards, selectedId, onSelect }: CardListProps) => (
     {cards.map((card) => {
       const latestEvent = card.events?.[card.events.length - 1];
       const selected = selectedId === card.id;
+      const loading = loadingCardId === card.id;
+
+      // 如果选中了，按钮常驻；如果未选中，当鼠标悬浮在 class="group" 的容器上时，按钮从 h-0 平滑展开并显现
+      const buttonTransitionClass = selected
+        ? 'mt-1.5 h-7 opacity-100'
+        : 'mt-0 h-0 opacity-0 group-hover:mt-1.5 group-hover:h-7 group-hover:opacity-100';
 
       return (
-        <button key={card.id} type="button" onClick={() => onSelect(card.id)} className="block w-full rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-blue-100">
+        <button key={card.id} type="button" onClick={() => onSelect(card.id)} className="group block w-full rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-blue-100">
           <Card className={selected ? 'rounded-lg border-blue-300 bg-blue-50 py-3' : 'rounded-lg border-gray-200 bg-white py-3 hover:bg-gray-50'}>
             <CardContent className="p-3 space-y-2">
               <div className="flex min-h-10 items-start justify-between gap-2">
@@ -63,6 +73,32 @@ export const CardList = ({ cards, selectedId, onSelect }: CardListProps) => (
                   <span className="truncate">{card.pnlText || '未填盈亏'}</span>
                   <span className="shrink-0">纪律 {card.disciplineScore ?? '-'}</span>
                 </div>
+              )}
+
+              {card.status === 'CLOSED' && onRequestAddEvent && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={loading}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onRequestAddEvent(card.id);
+                  }}
+                  className={`w-full overflow-hidden transition-all duration-200 gap-1 text-[9px] font-bold uppercase tracking-wide ${buttonTransitionClass}`}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
+                      <span>正在加载...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-3 w-3" />
+                      追加卖出后跟盘/反思
+                    </>
+                  )}
+                </Button>
               )}
             </CardContent>
           </Card>
