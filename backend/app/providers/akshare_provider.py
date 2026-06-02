@@ -176,7 +176,7 @@ def _akshare():
 def _configure_akshare_proxy_bypass() -> None:
     if os.getenv("AKSHARE_BYPASS_PROXY", "true").strip().lower() not in {"1", "true", "yes", "on"}:
         return
-    default_hosts = "push2.eastmoney.com,push2his.eastmoney.com,*.eastmoney.com,eastmoney.com,finance.sina.com.cn,*.sina.com.cn,proxy.finance.qq.com,*.qq.com"
+    default_hosts = "push2.eastmoney.com,push2his.eastmoney.com,emappdata.eastmoney.com,*.eastmoney.com,eastmoney.com,qt.gtimg.cn,finance.pae.baidu.com,finance.sina.com.cn,*.sina.com.cn,proxy.finance.qq.com,*.qq.com"
     for key in ("NO_PROXY", "no_proxy"):
         current = os.getenv(key, "")
         values = [value.strip() for value in current.split(",") if value.strip()]

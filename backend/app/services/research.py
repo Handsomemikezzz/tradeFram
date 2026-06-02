@@ -49,9 +49,12 @@ def create_research_task(db: Session, payload: ResearchTaskCreate) -> m.Research
     stock = market_dataset["stock"]
     bars = market_dataset["bars"]
     financial = market_dataset.get("financial")
-    latest_close = bars[-1].close if bars else stock.price
-    ma5 = sum(bar.close for bar in bars[-5:]) / min(len(bars), 5)
-    ma20 = sum(bar.close for bar in bars[-20:]) / min(len(bars), 20)
+    from .indicators import moving_average_snapshot_from_bars
+
+    indicator = moving_average_snapshot_from_bars(bars)
+    latest_close = indicator.latest_close if indicator.latest_close is not None else stock.price
+    ma5 = indicator.ma5 if indicator.ma5 is not None else stock.price
+    ma20 = indicator.ma20 if indicator.ma20 is not None else stock.price
 
     risks = [
         {"title": "数据源限制", "description": "当前仅通过 AkShare 按单只股票拉取公开行情与财务摘要；上游不可用时任务会显式失败或沿用已标记的过期缓存。", "severity": "MEDIUM"},

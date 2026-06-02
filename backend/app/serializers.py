@@ -55,14 +55,12 @@ def _live_quote_from_warehouse(stock: m.Stock) -> dict | None:
 
 
 def _merge_live_price_insights(key_insights: list[str], stock: m.Stock) -> list[str]:
-    store = WarehouseMarketDataStore()
-    bars = store.get_daily_bars(stock.code, limit=20)
-    if not bars:
+    from .services.indicators import moving_average_snapshot_for_code
+
+    snapshot = moving_average_snapshot_for_code(stock.code)
+    if snapshot.latest_close is None or snapshot.ma5 is None or snapshot.ma20 is None:
         return key_insights
-    latest_close = bars[-1].close
-    ma5 = sum(bar.close for bar in bars[-5:]) / min(len(bars), 5)
-    ma20 = sum(bar.close for bar in bars[-20:]) / min(len(bars), 20)
-    live_line = f"最新收盘价：{latest_close:.2f}；MA5={ma5:.2f}，MA20={ma20:.2f}。"
+    live_line = f"最新收盘价：{snapshot.latest_close:.2f}；MA5={snapshot.ma5:.2f}，MA20={snapshot.ma20:.2f}。"
     merged: list[str] = []
     replaced = False
     for insight in key_insights:

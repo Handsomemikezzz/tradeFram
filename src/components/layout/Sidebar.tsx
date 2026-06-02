@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   BookOpenCheck,
+  Flame,
   LayoutDashboard,
   Search,
   TrendingDown,
@@ -20,6 +21,7 @@ import { dataSourceStatusLabel, DataSourceHealthItem, systemApi, SystemStatusRes
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: '首页概览', path: '/' },
+  { icon: Flame, label: '热门股票', path: '/hot-stocks' },
   { icon: Search, label: '股票研究', path: '/research' },
   { icon: TrendingDown, label: '连板断板', path: '/limit-up-breaks' },
   { icon: BookOpenCheck, label: '交易复盘', path: '/reviews' },

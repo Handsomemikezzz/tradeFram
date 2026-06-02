@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -17,23 +18,30 @@ import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  ChevronDown,
+  Flame,
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { TodayTasks } from '@/components/dashboard/TodayTasks';
 import { MonitoringTable } from '@/components/dashboard/MonitoringTable';
-import { auditApi, DashboardOverviewResponse, formatCurrency, formatTime, logLevelLabel, LogResponse, researchApi, systemApi } from '@/services/api';
+import { auditApi, DashboardOverviewResponse, formatCurrency, formatTime, hotStockApi, HotStockSnapshotResponse, logLevelLabel, LogResponse, researchApi, systemApi } from '@/services/api';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [logs, setLogs] = useState<LogResponse[]>([]);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [quickCode, setQuickCode] = useState('');
   const [overview, setOverview] = useState<DashboardOverviewResponse | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [hotSummary, setHotSummary] = useState<HotStockSnapshotResponse | null>(null);
+  const [hotStocksExpanded, setHotStocksExpanded] = useState(false);
+
+  const HOT_STOCKS_PREVIEW_COUNT = 5;
 
   useEffect(() => {
     let cancelled = false;
@@ -43,6 +51,9 @@ export default function Dashboard() {
     auditApi.getLogs({ pageSize: 20 })
       .then((page) => { if (!cancelled) setLogs(page.items); })
       .catch((err: Error) => { if (!cancelled) setLogsError(err.message); });
+    hotStockApi.getSummary(50)
+      .then((data) => { if (!cancelled) setHotSummary(data); })
+      .catch(() => { if (!cancelled) setHotSummary(null); });
     return () => { cancelled = true; };
   }, []);
 
@@ -82,6 +93,101 @@ export default function Dashboard() {
 
       {/* Today's Tasks */}
       <TodayTasks tasks={overview?.tasks} />
+
+      {/* Hot Stocks Summary Card — collapsed by default */}
+      <Card className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <CardContent className="p-0">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50/80 transition-colors"
+            onClick={() => setHotStocksExpanded((open) => !open)}
+            aria-expanded={hotStocksExpanded}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <Flame className="h-4 w-4 shrink-0 text-orange-500" />
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-gray-900">热门股票</h3>
+                <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono truncate">
+                  {hotSummary?.tradeDate
+                    ? `${hotSummary.tradeDate} · ${hotSummary.source} · ${hotSummary.items.length} 只`
+                    : '暂无快照 · 点击前往热门股页刷新'}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="hidden sm:inline text-[10px] text-gray-400">
+                {hotStocksExpanded ? '收起' : `展开 Top ${HOT_STOCKS_PREVIEW_COUNT}+`}
+              </span>
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 text-gray-400 transition-transform duration-200',
+                  hotStocksExpanded && 'rotate-180',
+                )}
+              />
+            </div>
+          </button>
+
+          {!hotStocksExpanded && (hotSummary?.items.length ?? 0) > 0 && (
+            <div className="border-t border-gray-100 px-4 py-3">
+              <div className="flex flex-wrap gap-2">
+                {hotSummary!.items.slice(0, HOT_STOCKS_PREVIEW_COUNT).map((item) => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] hover:border-blue-200 hover:bg-blue-50 transition-colors"
+                    onClick={() => navigate('/hot-stocks')}
+                  >
+                    <span className="font-mono text-red-600">#{item.rank}</span>
+                    <span className="font-bold text-gray-800 max-w-[5rem] truncate">{item.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {hotStocksExpanded && (
+            <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-gray-500">共 {hotSummary?.items.length ?? 0} 只 · 点击进入详情页</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[10px] font-bold"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate('/hot-stocks');
+                  }}
+                >
+                  查看全部
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 max-h-[420px] overflow-y-auto pr-1">
+                {(hotSummary?.items ?? []).map((item) => (
+                  <button
+                    key={item.code}
+                    type="button"
+                    className="text-left rounded border border-gray-100 bg-gray-50 px-3 py-2 hover:border-blue-200 hover:bg-blue-50 transition-colors"
+                    onClick={() => navigate('/hot-stocks')}
+                  >
+                    <div className="text-[10px] font-mono text-red-600">#{item.rank}</div>
+                    <div className="text-xs font-bold text-gray-900 truncate">{item.name}</div>
+                    <div className="text-[10px] font-mono text-gray-400">{item.code}</div>
+                  </button>
+                ))}
+                {(hotSummary?.items ?? []).length === 0 && (
+                  <button
+                    type="button"
+                    className="col-span-full text-left rounded border border-dashed border-gray-200 bg-gray-50 px-3 py-3 text-xs text-gray-500 hover:border-blue-200 hover:bg-blue-50"
+                    onClick={() => navigate('/hot-stocks')}
+                  >
+                    暂无热门股快照，进入热门股票页刷新。
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Main Monitoring Table */}

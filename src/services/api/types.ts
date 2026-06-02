@@ -673,3 +673,44 @@ export interface IronLawResponse extends IronLawRequest {
   createdAt: string;
   updatedAt: string;
 }
+
+// --- Hot Stocks ---
+
+export type HotStockResearchStatus = 'NONE' | 'HAS_REPORT' | 'PENDING' | 'PROCESSING';
+
+export interface HotStockResearchState {
+  status: HotStockResearchStatus;
+  taskId: string | null;
+  reportId: string | null;
+}
+
+export interface HotStockItemResponse {
+  id: string;
+  rank: number;
+  code: string;
+  name: string;
+  price: number | null;
+  changePercent: number | null;
+  industry: string | null;
+  ma5: number | null;
+  ma20: number | null;
+  trendLabel: string;
+  isRecentLimitUpBreak: boolean;
+  inWatchlist: boolean;
+  hasOpenReviewCard: boolean;
+  research: HotStockResearchState;
+  createdAt: string;
+}
+
+export interface HotStockSnapshotResponse {
+  snapshotId: string | null;
+  tradeDate: string | null;
+  source: string;
+  isToday: boolean;
+  isFallback: boolean;
+  errorMessage: string | null;
+  generatedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  items: HotStockItemResponse[];
+}

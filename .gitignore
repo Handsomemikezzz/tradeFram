@@ -47,6 +47,10 @@ Thumbs.db
 .netlify/
 .omx/
 .worktrees/
+.cursor/
+
+# Agent planning artifacts (keep human docs in docs/*.md)
+docs/superpowers/
 
 # Python backend local artifacts
 .venv/
@@ -55,3 +59,4 @@ data/
 *.db-journal
 __pycache__/
 .pytest_cache/
+.codegraph/

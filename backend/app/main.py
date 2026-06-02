@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routers import audit, data, data_health, limit_up_breaks, monitoring, p0b, portfolio, research, reviews, system, trading
+from .routers import audit, data, data_health, hot_stocks, limit_up_breaks, monitoring, p0b, portfolio, research, reviews, system, trading
 from .seed import init_db
 from .utils import http_exception_handler, validation_exception_handler, ok
 
@@ -101,6 +101,6 @@ def upload_image(file: UploadFile = File(...)):
     return ok({"url": f"/api/v1/uploads/{filename}"})
 
 
-for router in [system.router, data.router, data_health.router, research.router, reviews.router, monitoring.router, limit_up_breaks.router, trading.router, portfolio.router, audit.router, p0b.router]:
+for router in [system.router, data.router, data_health.router, research.router, reviews.router, monitoring.router, hot_stocks.router, limit_up_breaks.router, trading.router, portfolio.router, audit.router, p0b.router]:
     app.include_router(router, prefix="/api/v1")
 

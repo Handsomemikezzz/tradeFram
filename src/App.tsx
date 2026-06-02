@@ -14,6 +14,7 @@ import DataHealth from './pages/DataHealth';
 import TradingConsole from './pages/TradingConsole';
 import HistoryPage from './pages/History';
 import Reviews from './pages/Reviews';
+import HotStocks from './pages/HotStocks';
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export default function App() {
@@ -25,6 +26,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/research" element={<Research />} />
             <Route path="/research/:code" element={<ReportDetail />} />
+            <Route path="/hot-stocks" element={<HotStocks />} />
             <Route path="/limit-up-breaks" element={<LimitUpBreakMonitor />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/data-health" element={<DataHealth />} />

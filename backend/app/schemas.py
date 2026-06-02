@@ -426,3 +426,9 @@ class IronLawUpdate(BaseModel):
     text: str | None = Field(default=None, min_length=1)
     tag: str | None = Field(default=None, min_length=1)
     status: Literal["COMPLIANT", "CHALLENGED", "VIOLATED"] | None = None
+
+
+class HotStockSnapshotCreate(BaseModel):
+    limit: int = Field(default=20, ge=1, le=100)
+    forceRefresh: bool = True
+    source: str = "EastmoneyHotRank"

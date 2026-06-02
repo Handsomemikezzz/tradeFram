@@ -204,6 +204,42 @@ class LimitUpBreakItem(Base):
     snapshot: Mapped[LimitUpBreakSnapshot] = relationship()
 
 
+class HotStockSnapshot(Base):
+    __tablename__ = "hot_stock_snapshot"
+    __table_args__ = (
+        UniqueConstraint("trade_date", "source", name="uq_hot_stock_snapshot_date_source"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, default="EastmoneyHotRank", index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="SUCCESS", index=True)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+
+class HotStockItem(Base):
+    __tablename__ = "hot_stock_item"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(String(64), ForeignKey("hot_stock_snapshot.id"), nullable=False, index=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    code: Mapped[str] = mapped_column(String(6), ForeignKey("stock.code"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    price: Mapped[float | None] = mapped_column(Float)
+    change_percent: Mapped[float | None] = mapped_column(Float)
+    industry: Mapped[str | None] = mapped_column(String(64))
+    ma5: Mapped[float | None] = mapped_column(Float)
+    ma20: Mapped[float | None] = mapped_column(Float)
+    trend_label: Mapped[str] = mapped_column(String(16), nullable=False, default="数据不足")
+    is_recent_limit_up_break: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    stock: Mapped[Stock] = relationship()
+    snapshot: Mapped[HotStockSnapshot] = relationship()
+
+
 class ReviewEntry(Base):
     __tablename__ = "review_entry"
 
