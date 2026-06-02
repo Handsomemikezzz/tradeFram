@@ -28,6 +28,7 @@
 - 不做异步任务框架。
 - 不做前复权全市场同步。
 - 不做分页、虚拟列表或自动历史清理。
+- 不在 MVP 中为全市场扫描引入前复权数据同步；原始日 K 的除权风险通过异常跳空过滤降低。
 
 ## 页面与路由
 
@@ -103,6 +104,14 @@
 ## 走势 A 规则
 
 第一版只做盘后日 K 选股，使用 warehouse 的未复权/原始日 K，快照记录 `priceAdjustment = raw`。
+
+除权/异常跳空过滤：
+
+- 第一版不直接引入全市场前复权同步，也不在扫描时逐只调用外部前复权接口。
+- 扫描服务在信号窗口内检测疑似除权或异常跳空日，避免把原始日 K 的除权缺口识别成关键阴线、下跌段或确认结构。
+- 若某股票在近 30 个交易日信号窗口内出现疑似除权/异常跳空，则该股票不进入走势 A 候选，并在扫描统计中计入异常过滤数量。
+- 初始判定使用后端常量：相邻交易日开盘相对前收的绝对跳空超过主板正常涨跌停边界缓冲，同时日内实体/振幅较小，或收盘涨跌幅与日 K 实体方向明显背离。
+- 该规则只作为 MVP 的防假信号机制；后续若需要更干净的形态识别，再新增前复权全市场同步和 `strategyVersion`。
 
 默认日期口径：
 
@@ -274,6 +283,13 @@
 - 使用 `SCREENER_*` 命名。
 - 示例：`SCREENER_NO_PRICE_DATA`、`SCREENER_DATA_COVERAGE_TOO_LOW`、`SCREENER_SNAPSHOT_NOT_FOUND`、`SCREENER_UNSUPPORTED_STRATEGY`。
 
+生成执行方式：
+
+- MVP 保持同步生成，`POST /screeners/snapshots` 在同一个请求内完成扫描并返回快照。
+- 为避免 SQLite 长时间写锁，服务必须先用 warehouse 数据在内存中完成扫描和规则判定，再开启短事务写入 `ScreenerSnapshot` / `ScreenerItem`。
+- 写事务只包含同日同版本快照 upsert、旧条目删除、新条目插入和统计更新。
+- 前端 loading 明确提示全市场扫描可能耗时几十秒；如果实测耗时稳定超过 60-90 秒，或同步请求影响本地服务响应，再升级为“提交任务 -> 后台执行 -> 前端轮询”的异步架构。
+
 响应字段：
 
 - 返回 `strategyType: "pattern_a"` 和 `strategyName: "走势 A"`。
@@ -316,12 +332,14 @@ python scripts/run_screener_snapshot.py --strategy pattern_a
 
 ## 实现计划提示
 
+开发切入点：先做后端数据库迁移、策略规则服务和单元测试，再做前端页面与 K 线展示。K 线视觉原型应建立在后端详情接口或固定 fixture 契约之上，不先于规则契约推进。
+
 后续实现应按以下顺序拆分：
 
 1. 抽出主板非 ST 股票池工具，并保证断板和数据健康行为不变。
 2. 新增 screener 模型、SQLite 轻量迁移、schema、serializer、router。
 3. 实现通用日 K 服务和 MA 计算。
-4. 实现走势 A 规则服务和快照生成。
+4. 实现走势 A 规则服务、疑似除权/异常跳空过滤和快照生成。
 5. 实现 watchlist 按需补齐 Stock。
 6. 新增脚本入口。
 7. 安装 `lightweight-charts`。
@@ -337,6 +355,7 @@ python scripts/run_screener_snapshot.py --strategy pattern_a
 - 基础过滤：上市天数、K 线完整度、近 20 日均成交额。
 - 覆盖率不足错误。
 - 关键阴线识别。
+- 疑似除权/异常跳空过滤。
 - 左侧下跌方向判断。
 - 已确认信号。
 - 待确认信号。
@@ -375,6 +394,7 @@ python scripts/run_screener_snapshot.py --strategy pattern_a
 
 - 规则主观且可能过宽：保存 `strategyVersion` 和 `criteria`，通过分项评分与标签辅助校准。
 - 同步生成可能耗时：前端显示明确 loading，后续再考虑异步任务。
-- 原始日 K 可能受除权影响：第一版记录 `priceAdjustment=raw`，后续可升级到前复权版本。
+- 原始日 K 可能受除权影响：第一版记录 `priceAdjustment=raw`，并加入疑似除权/异常跳空过滤；后续可升级到前复权版本。
+- SQLite 写锁风险：扫描和规则判定不持有写事务，只有最终 upsert/insert 阶段短时间写库。
 - `stock` 表和 warehouse 主数据可能不同步：加入观察池时按需补齐最小 `Stock`。
 - `lightweight-charts` attribution 要求：实现时保留 TradingView 归属链接。
