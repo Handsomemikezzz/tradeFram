@@ -12,14 +12,14 @@ from ..data_layer.storage.metadata_store import MetadataStore
 from ..data_layer.storage.paths import DataLayerPaths
 from ..data_layer.warehouse.reader import WarehouseInstrument, WarehouseMarketDataStore
 from ..utils import CN_TZ, dt_iso
-from .limit_up_breaks import MIN_TARGET_COVERAGE
+from .stock_universe import MIN_MAIN_BOARD_COVERAGE, main_board_non_st_stocks
 
 
 def get_data_health_overview(db: Session, *, data_root: Path = Path("data")) -> dict[str, Any]:
     store = WarehouseMarketDataStore(data_root)
     paths = DataLayerPaths(data_root)
     today = datetime.now(CN_TZ).date()
-    main_board_stocks = _main_board_non_st_stocks(store.list_instruments())
+    main_board_stocks = main_board_non_st_stocks(store=store)
     expected_count = len(main_board_stocks)
     stock_codes = {stock.code for stock in main_board_stocks}
 
@@ -52,28 +52,11 @@ def get_data_health_overview(db: Session, *, data_root: Path = Path("data")) -> 
             "availableBars": available_count,
             "expectedBars": expected_count,
             "coverage": round(coverage, 4),
-            "minCoverage": MIN_TARGET_COVERAGE,
+            "minCoverage": MIN_MAIN_BOARD_COVERAGE,
         },
         "sync": latest_run,
         "snapshot": _snapshot_payload(latest_snapshot, latest_open_date),
     }
-
-
-def _main_board_non_st_stocks(stocks: list[WarehouseInstrument]) -> list[WarehouseInstrument]:
-    return [stock for stock in stocks if stock.status.lower() == "active" and _is_main_board(stock) and not _is_st(stock)]
-
-
-def _is_main_board(stock: WarehouseInstrument) -> bool:
-    if stock.exchange == "SH":
-        return stock.code.startswith(("600", "601", "603", "605"))
-    if stock.exchange == "SZ":
-        return stock.code.startswith(("000", "001", "002", "003"))
-    return False
-
-
-def _is_st(stock: WarehouseInstrument) -> bool:
-    normalized = stock.name.upper().replace(" ", "")
-    return normalized.startswith(("*ST", "ST", "S*ST"))
 
 
 def _daily_bars_status(latest_open_date, latest_price_date, coverage: float, expected_count: int) -> str:
@@ -81,7 +64,7 @@ def _daily_bars_status(latest_open_date, latest_price_date, coverage: float, exp
         return "MISSING"
     if latest_price_date < latest_open_date:
         return "STALE"
-    if coverage < MIN_TARGET_COVERAGE:
+    if coverage < MIN_MAIN_BOARD_COVERAGE:
         return "INCOMPLETE"
     return "READY"
 

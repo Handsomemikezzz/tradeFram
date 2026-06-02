@@ -57,8 +57,16 @@ function snapshotErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : '断板快照加载失败';
 }
 
-export default function LimitUpBreakMonitor() {
-  const [tradeDate, setTradeDate] = useState('');
+type LimitUpBreakMonitorProps = {
+  embedded?: boolean;
+  tradeDate?: string;
+  onTradeDateChange?: (value: string) => void;
+};
+
+export default function LimitUpBreakMonitor({ embedded = false, tradeDate: externalTradeDate, onTradeDateChange }: LimitUpBreakMonitorProps = {}) {
+  const [internalTradeDate, setInternalTradeDate] = useState('');
+  const tradeDate = externalTradeDate ?? internalTradeDate;
+  const setTradeDate = onTradeDateChange ?? setInternalTradeDate;
   const [threshold, setThreshold] = useState(2);
   const [snapshot, setSnapshot] = useState<LimitUpBreakSnapshotResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -96,7 +104,7 @@ export default function LimitUpBreakMonitor() {
 
   useEffect(() => {
     loadSnapshot();
-  }, []);
+  }, [tradeDate, threshold]);
 
   const generateSnapshot = async () => {
     setGenerating(true);
@@ -150,20 +158,24 @@ export default function LimitUpBreakMonitor() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2 text-[#1A1C1E]">
-            连板断板监控
-            <span className="px-2 py-0.5 bg-red-50 text-red-700 text-[10px] font-bold rounded uppercase tracking-tighter border border-red-100">盘后确认</span>
-          </h2>
-          <p className="text-gray-500 text-xs font-medium uppercase tracking-widest mt-1">主板短线专题监控</p>
-        </div>
+      <div className={cn("flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4", embedded && "lg:items-end")}>
+        {!embedded && (
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2 text-[#1A1C1E]">
+              连板断板监控
+              <span className="px-2 py-0.5 bg-red-50 text-red-700 text-[10px] font-bold rounded uppercase tracking-tighter border border-red-100">盘后确认</span>
+            </h2>
+            <p className="text-gray-500 text-xs font-medium uppercase tracking-widest mt-1">主板短线专题监控</p>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 shadow-sm">
-          <div className="relative">
-            <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-            <Input type="date" value={tradeDate} onChange={(event) => setTradeDate(event.target.value)} className="h-8 pl-8 w-[150px] text-[11px] bg-white border-gray-200 rounded" placeholder={todayText()} />
-          </div>
+          {!embedded && (
+            <div className="relative">
+              <CalendarDays className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Input type="date" value={tradeDate} onChange={(event) => setTradeDate(event.target.value)} className="h-8 pl-8 w-[150px] text-[11px] bg-white border-gray-200 rounded" placeholder={todayText()} />
+            </div>
+          )}
           <div className="flex items-center gap-1 px-2 h-8 rounded border border-gray-200 bg-gray-50">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">门槛</span>
             <Input

@@ -7,11 +7,18 @@ from sqlalchemy.orm import Session
 from .. import models as m
 from ..schemas import MonitoringCreate, MonitoringUpdate, WatchlistCreate
 from ..services.research import require_stock
+from ..services.stock_universe import ensure_stock_from_warehouse
 from ..utils import api_error, new_id
 
 
 def add_watchlist_item(db: Session, payload: WatchlistCreate) -> m.WatchlistItem:
-    stock = require_stock(db, payload.code)
+    normalized_code = str(payload.code).zfill(6)
+    stock = db.get(m.Stock, normalized_code)
+    if stock is None:
+        if payload.source == "pattern_a":
+            stock = ensure_stock_from_warehouse(db, payload.code)
+        else:
+            stock = require_stock(db, payload.code)
     existing = db.query(m.WatchlistItem).filter(m.WatchlistItem.code == stock.code).first()
     if existing:
         raise api_error(409, "WATCHLIST_ALREADY_EXISTS", f"{stock.name} 已在观察池中", {"id": existing.id, "code": stock.code})

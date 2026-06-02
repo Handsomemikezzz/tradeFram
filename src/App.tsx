@@ -9,7 +9,7 @@ import { Layout } from '@/components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import Research from './pages/Research';
 import ReportDetail from './pages/ReportDetail';
-import LimitUpBreakMonitor from './pages/LimitUpBreakMonitor';
+import Screeners from './pages/Screeners';
 import DataHealth from './pages/DataHealth';
 import TradingConsole from './pages/TradingConsole';
 import HistoryPage from './pages/History';
@@ -27,7 +27,8 @@ export default function App() {
             <Route path="/research" element={<Research />} />
             <Route path="/research/:code" element={<ReportDetail />} />
             <Route path="/hot-stocks" element={<HotStocks />} />
-            <Route path="/limit-up-breaks" element={<LimitUpBreakMonitor />} />
+            <Route path="/screeners" element={<Screeners />} />
+            <Route path="/limit-up-breaks" element={<Navigate to="/screeners" replace />} />
             <Route path="/reviews" element={<Reviews />} />
             <Route path="/data-health" element={<DataHealth />} />
             <Route path="/trading" element={<TradingConsole />} />

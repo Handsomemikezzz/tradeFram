@@ -13,3 +13,4 @@ export * from './limitUpBreakApi';
 export * from './reviewApi';
 export * from './reviewCardApi';
 export * from './hotStockApi';
+export * from './screenerApi';

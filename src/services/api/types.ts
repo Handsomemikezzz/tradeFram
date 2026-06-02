@@ -328,6 +328,72 @@ export interface PostBreakBarsResponse {
   bars: PostBreakBarResponse[];
 }
 
+export type ScreenerItemStatus = 'CONFIRMED' | 'PENDING_CONFIRMATION';
+
+export interface ScreenerItemSummaryResponse {
+  id: string;
+  snapshotId: string;
+  tradeDate: string;
+  code: string;
+  name: string;
+  industry: string;
+  status: ScreenerItemStatus;
+  signalDate: string;
+  score: number;
+  priceActionScore: number;
+  movingAverageScore: number;
+  volumeScore: number;
+  changePercent: number | null;
+  tags: string[];
+  inWatchlist: boolean;
+}
+
+export interface ScreenerDailyBarResponse {
+  tradeDate: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  amount: number;
+  changePercent: number | null;
+  ma5: number | null;
+  ma10: number | null;
+  ma20: number | null;
+}
+
+export interface ScreenerMarkerResponse {
+  tradeDate: string;
+  endDate?: string;
+  kind: 'key_bearish' | 'stabilization' | 'confirm';
+  label: string;
+}
+
+export interface ScreenerSnapshotResponse {
+  id: string;
+  tradeDate: string;
+  strategyType: string;
+  strategyName: string;
+  strategyVersion: string;
+  provider: string;
+  priceAdjustment: string;
+  criteria: Record<string, unknown>;
+  scanCount: number;
+  eligibleCount: number;
+  confirmedCount: number;
+  pendingCount: number;
+  coverage: number;
+  generatedAt: string;
+  updatedAt: string;
+  items: ScreenerItemSummaryResponse[];
+}
+
+export interface ScreenerItemDetailResponse extends ScreenerItemSummaryResponse {
+  reason: Record<string, unknown>;
+  bars: ScreenerDailyBarResponse[];
+  markers: ScreenerMarkerResponse[];
+}
+
 export type ReviewEntryType = 'TRADE_ACTION' | 'OBSERVATION_DECISION';
 export type ReviewPlanStatus = 'PLANNED' | 'UNPLANNED' | 'INTRADAY_ADJUSTMENT' | 'OBSERVED_ONLY';
 

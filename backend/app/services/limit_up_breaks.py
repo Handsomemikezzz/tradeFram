@@ -10,6 +10,10 @@ from sqlalchemy.orm import Session
 from .. import models as m
 from ..data_layer.warehouse.reader import WarehouseInstrument, WarehouseMarketDataStore, WarehousePriceBar
 from ..utils import CN_TZ, new_id
+from .stock_universe import (
+    main_board_non_st_stocks,
+    resolve_default_screener_trade_date as resolve_default_limit_up_break_trade_date_impl,
+)
 
 MIN_TARGET_COVERAGE = 0.995
 DEFAULT_READY_AFTER = time(18, 0)
@@ -45,17 +49,8 @@ def calculate_limit_up_price(previous_close: float) -> float:
 
 
 def resolve_default_limit_up_break_trade_date(*, now: datetime | None = None, provider: str = "AkShare") -> date | None:
-    current = now or datetime.now(CN_TZ)
-    if current.tzinfo is None:
-        current = current.replace(tzinfo=CN_TZ)
-    current = current.astimezone(CN_TZ)
-    today = current.date()
-    open_dates = WarehouseMarketDataStore().open_trade_dates(end_date=today)
-    if not open_dates:
-        return None
-    if open_dates[-1] == today and current.time() < DEFAULT_READY_AFTER:
-        return open_dates[-2] if len(open_dates) >= 2 else None
-    return open_dates[-1]
+    _ = provider
+    return resolve_default_limit_up_break_trade_date_impl(now=now)
 
 
 def generate_limit_up_break_snapshot(db: Session, trade_date: date | None = None, *, threshold: int = 2, provider: str = "AkShare") -> m.LimitUpBreakSnapshot:
@@ -67,7 +62,7 @@ def generate_limit_up_break_snapshot(db: Session, trade_date: date | None = None
         raise LimitUpBreakError("NO_PRICE_DATA", "无可用于断板监控的未复权日 K 数据", status_code=422)
 
     store = WarehouseMarketDataStore()
-    stocks = _main_board_non_st_stocks(db, store=store)
+    stocks = main_board_non_st_stocks(db, store=store)
     stock_codes = {stock.code for stock in stocks} if stocks else None
     known_open_dates = store.open_trade_dates(end_date=target_date)
     if target_date in known_open_dates:
@@ -225,13 +220,8 @@ def _new_item(
     )
 
 
-def _main_board_non_st_stocks(db: Session | None = None, *, store: WarehouseMarketDataStore | None = None) -> list[WarehouseInstrument]:
-    stocks = (store or WarehouseMarketDataStore()).list_instruments()
-    return [stock for stock in stocks if stock.status.lower() == "active" and _is_main_board(stock) and not _is_st(stock)]
-
-
 def _ensure_target_date_coverage(db: Session, target_date: date, provider: str) -> None:
-    stocks = _main_board_non_st_stocks(db)
+    stocks = main_board_non_st_stocks(db)
     available, expected, coverage = _target_date_coverage(target_date, stocks)
     if expected < 5:
         return
@@ -322,7 +312,7 @@ def _ensure_target_date_coverage_from_frame(target_date: date, stocks: list[Ware
 
 
 def _latest_covered_trade_date(end_date: date | None, provider: str, *, min_coverage: float = MIN_TARGET_COVERAGE) -> date | None:
-    stocks = _main_board_non_st_stocks()
+    stocks = main_board_non_st_stocks()
     counts = WarehouseMarketDataStore().daily_bar_counts_by_date(
         codes={stock.code for stock in stocks} if stocks else None,
         end_date=end_date,
@@ -334,19 +324,6 @@ def _latest_covered_trade_date(end_date: date | None, provider: str, *, min_cove
         if expected < 5 or counts[trade_date] / expected >= min_coverage:
             return trade_date
     return None
-
-
-def _is_main_board(stock: WarehouseInstrument) -> bool:
-    if stock.exchange == "SH":
-        return stock.code.startswith(("600", "601", "603", "605"))
-    if stock.exchange == "SZ":
-        return stock.code.startswith(("000", "001", "002", "003"))
-    return False
-
-
-def _is_st(stock: WarehouseInstrument) -> bool:
-    normalized = stock.name.upper().replace(" ", "")
-    return normalized.startswith(("*ST", "ST", "S*ST"))
 
 
 def _known_trade_dates(db: Session, provider: str, end_date: date) -> list[date]:

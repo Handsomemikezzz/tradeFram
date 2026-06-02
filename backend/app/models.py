@@ -204,6 +204,60 @@ class LimitUpBreakItem(Base):
     snapshot: Mapped[LimitUpBreakSnapshot] = relationship()
 
 
+class ScreenerSnapshot(Base):
+    __tablename__ = "screener_snapshot"
+    __table_args__ = (
+        UniqueConstraint(
+            "trade_date",
+            "strategy_type",
+            "strategy_version",
+            "provider",
+            name="uq_screener_snapshot_date_strategy_provider",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    strategy_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    strategy_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    strategy_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False, default="AkShare")
+    price_adjustment: Mapped[str] = mapped_column(String(16), nullable=False, default="raw")
+    criteria: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    scan_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    eligible_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    confirmed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pending_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    coverage: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    items: Mapped[list["ScreenerItem"]] = relationship(back_populates="snapshot")
+
+
+class ScreenerItem(Base):
+    __tablename__ = "screener_item"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(String(64), ForeignKey("screener_snapshot.id"), nullable=False, index=True)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(6), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    industry: Mapped[str] = mapped_column(String(64), nullable=False, default="未知")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    signal_date: Mapped[date] = mapped_column(Date, nullable=False)
+    score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    price_action_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    moving_average_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    volume_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    change_percent: Mapped[float | None] = mapped_column(Float)
+    tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    reason: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+
+    snapshot: Mapped[ScreenerSnapshot] = relationship(back_populates="items")
+
+
 class HotStockSnapshot(Base):
     __tablename__ = "hot_stock_snapshot"
     __table_args__ = (

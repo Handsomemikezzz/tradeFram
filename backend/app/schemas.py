@@ -106,6 +106,12 @@ class LimitUpBreakSnapshotCreate(BaseModel):
     provider: str = "AkShare"
 
 
+class ScreenerSnapshotCreate(BaseModel):
+    tradeDate: date | None = None
+    provider: str = "AkShare"
+    strategyType: str = "pattern_a"
+
+
 class Page(BaseModel):
     items: list[Any]
     page: int

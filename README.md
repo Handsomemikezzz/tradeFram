@@ -86,7 +86,7 @@ npm run start:dev
 - 首页概览：`/`
 - 股票研究：`/research`
 - 研究报告详情：`/research/:code`
-- 连板断板：`/limit-up-breaks`
+- 选股（走势 A / 断板）：`/screeners`
 - 热门股票：`/hot-stocks`
 - 交易复盘：`/reviews`
 - 数据健康：`/data-health`
@@ -116,7 +116,11 @@ python scripts/init_history_data.py --provider akshare --start-date 2020-01-01
 python scripts/sync_daily_data.py --provider akshare --lookback-days 20
 ```
 
-更多数据层说明见 [docs/data-layer.md](docs/data-layer.md)。
+选股快照（走势 A）：
+
+```bash
+python scripts/run_screener_snapshot.py --trade-date 2026-06-02 --strategy pattern_a
+```
 
 ## 验证
 
@@ -135,9 +139,5 @@ python scripts/smoke_real_data_rc.py akshare
 ```
 
 ## 专题文档
-
-- [数据层](docs/data-layer.md)
-- [连板断板监控](docs/limit-up-breaks.md)
-- [交易复盘](docs/reviews.md)
 
 API 细节以运行中的 FastAPI OpenAPI 页面为准：<http://127.0.0.1:8000/docs>。
