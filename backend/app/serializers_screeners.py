@@ -3,7 +3,12 @@ from __future__ import annotations
 from sqlalchemy.orm import Session, object_session
 
 from . import models as m
-from .services.daily_bars import build_markers_from_reason, daily_bar_payload, get_daily_bar_series
+from .services.daily_bars import (
+    PATTERN_A_DETAIL_LOOKBACK,
+    build_markers_from_reason,
+    daily_bar_payload,
+    get_daily_bar_series,
+)
 from .utils import dt_iso
 
 
@@ -61,7 +66,7 @@ def screener_item_summary_payload(item: m.ScreenerItem, *, in_watchlist: bool) -
 
 
 def screener_item_detail_payload(item: m.ScreenerItem, *, in_watchlist: bool) -> dict:
-    bars = get_daily_bar_series(item.code, end_date=item.trade_date, lookback=30)
+    bars = get_daily_bar_series(item.code, end_date=item.trade_date, lookback=PATTERN_A_DETAIL_LOOKBACK)
     return {
         **screener_item_summary_payload(item, in_watchlist=in_watchlist),
         "reason": item.reason,

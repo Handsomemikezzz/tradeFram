@@ -9,6 +9,7 @@ from .stock_universe import warehouse_bar_change_percent
 
 MAX_LOOKBACK = 120
 DEFAULT_LOOKBACK = 30
+PATTERN_A_DETAIL_LOOKBACK = 120
 
 
 @dataclass(frozen=True)

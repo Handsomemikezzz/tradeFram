@@ -97,8 +97,8 @@ def seed_main_board_universe(target: date, count: int = 6) -> None:
         code = f"60000{index + 1}"
         add_instrument(code, f"测试{index}")
         price = 10.0 - index * 0.1
-        for offset in range(70):
-            day = date.fromordinal(target.toordinal() - 69 + offset)
+        for offset in range(150):
+            day = date.fromordinal(target.toordinal() - 149 + offset)
             add_bar(code, day, open_=price, high=price + 0.2, low=price - 0.2, close=price)
 
 
@@ -149,7 +149,7 @@ def test_generate_pattern_a_snapshot_and_detail():
     if fetched["items"]:
         item = fetched["items"][0]
         detail = assert_ok(client.get(f"/api/v1/screeners/snapshots/{snapshot['id']}/items/{item['id']}"))
-        assert len(detail["bars"]) == 30
+        assert len(detail["bars"]) == 120
         assert "markers" in detail
 
 

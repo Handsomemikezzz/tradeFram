@@ -287,7 +287,7 @@ export function PatternATab({ tradeDate }: Props) {
 
           <Card className="border border-gray-200">
             <CardContent className="p-4 space-y-4">
-              {detailLoading && <div className="h-[360px] flex items-center justify-center text-gray-400 text-sm">加载 K 线详情...</div>}
+              {detailLoading && <div className="h-[480px] flex items-center justify-center text-gray-400 text-sm">加载 K 线详情...</div>}
               {!detailLoading && detailError && (
                 <div className="space-y-3">
                   <p className="text-sm text-red-600">{detailError}</p>

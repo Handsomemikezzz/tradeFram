@@ -16,13 +16,29 @@ import {
 } from 'lightweight-charts';
 import { ScreenerDailyBarResponse, ScreenerMarkerResponse } from '@/services/api';
 
+/** 同花顺式日 K：固定柱宽、右侧留白、纵向留白，避免 fitContent 把蜡烛横向拉扁 */
+const CHART_HEIGHT = 480;
+const BAR_SPACING = 8;
+const MIN_BAR_SPACING = 5;
+const RIGHT_OFFSET = 12;
+const PRICE_SCALE_MARGINS = { top: 0.12, bottom: 0.12 };
+
+function applyDefaultVisibleRange(chart: IChartApi, barCount: number) {
+  if (barCount <= 0) return;
+  const timeScale = chart.timeScale();
+  timeScale.setVisibleLogicalRange({
+    from: Math.max(0, barCount - 125),
+    to: barCount - 1 + RIGHT_OFFSET,
+  });
+}
+
 type Props = {
   bars: ScreenerDailyBarResponse[];
   markers?: ScreenerMarkerResponse[];
   height?: number;
 };
 
-export function PatternAChart({ bars, markers = [], height = 360 }: Props) {
+export function PatternAChart({ bars, markers = [], height = CHART_HEIGHT }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -30,6 +46,11 @@ export function PatternAChart({ bars, markers = [], height = 360 }: Props) {
   const ma10Ref = useRef<ISeriesApi<'Line'> | null>(null);
   const ma20Ref = useRef<ISeriesApi<'Line'> | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<string> | null>(null);
+  const barCountRef = useRef(0);
+
+  useEffect(() => {
+    barCountRef.current = bars.length;
+  }, [bars.length]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -43,8 +64,32 @@ export function PatternAChart({ bars, markers = [], height = 360 }: Props) {
         vertLines: { color: '#F3F4F6' },
         horzLines: { color: '#F3F4F6' },
       },
-      rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false },
+      rightPriceScale: {
+        borderVisible: false,
+        scaleMargins: PRICE_SCALE_MARGINS,
+      },
+      timeScale: {
+        borderVisible: false,
+        barSpacing: BAR_SPACING,
+        minBarSpacing: MIN_BAR_SPACING,
+        rightOffset: RIGHT_OFFSET,
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: {
+        vertLine: { labelVisible: true },
+        horzLine: { labelVisible: true },
+      },
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+      },
+      handleScale: {
+        axisPressedMouseMove: { time: true, price: true },
+        mouseWheel: true,
+        pinch: true,
+      },
     });
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#DC2626',
@@ -68,6 +113,7 @@ export function PatternAChart({ bars, markers = [], height = 360 }: Props) {
     const resize = () => {
       if (containerRef.current) {
         chart.applyOptions({ width: containerRef.current.clientWidth });
+        applyDefaultVisibleRange(chart, barCountRef.current);
       }
     };
     resize();
@@ -108,12 +154,14 @@ export function PatternAChart({ bars, markers = [], height = 360 }: Props) {
         text: marker.label,
       })),
     );
-    chartRef.current?.timeScale().fitContent();
+    if (chartRef.current) {
+      applyDefaultVisibleRange(chartRef.current, bars.length);
+    }
   }, [bars, markers]);
 
   return (
     <div className="space-y-1">
-      <div ref={containerRef} className="w-full" />
+      <div ref={containerRef} className="w-full min-h-[480px]" />
       <p className="text-[10px] text-gray-400 text-right">
         Charts by{' '}
         <a href="https://www.tradingview.com/lightweight-charts/" target="_blank" rel="noreferrer" className="underline">
