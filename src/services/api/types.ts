@@ -369,6 +369,14 @@ export interface ScreenerMarkerResponse {
   label: string;
 }
 
+export interface ScreenerStockDailyBarsResponse {
+  code: string;
+  endDate: string;
+  lookback: number;
+  priceAdjustment: string;
+  bars: ScreenerDailyBarResponse[];
+}
+
 export interface ScreenerSnapshotResponse {
   id: string;
   tradeDate: string;

@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from './client';
-import { ScreenerItemDetailResponse, ScreenerSnapshotResponse } from './types';
+import { ScreenerItemDetailResponse, ScreenerSnapshotResponse, ScreenerStockDailyBarsResponse } from './types';
 
 export const screenerApi = {
   createSnapshot: (body: { tradeDate?: string; provider?: string; strategyType?: string }) =>
@@ -15,4 +15,6 @@ export const screenerApi = {
     apiClient.get<ScreenerSnapshotResponse>(`/screeners/snapshots/${tradeDate}`, query),
   getItemDetail: (snapshotId: string, itemId: string) =>
     apiClient.get<ScreenerItemDetailResponse>(`/screeners/snapshots/${snapshotId}/items/${itemId}`),
+  getDailyBars: (code: string, query: { endDate: string; lookback?: number }) =>
+    apiClient.get<ScreenerStockDailyBarsResponse>(`/screeners/stocks/${code}/daily-bars`, query),
 };
