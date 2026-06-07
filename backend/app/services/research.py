@@ -12,6 +12,30 @@ from .data_service import DataFetchError, fetch_market_dataset, get_provider, no
 from .tradingagents_research import run_tradingagents_analysis
 
 
+DELETABLE_RESEARCH_TASK_STATUSES = frozenset({"FAILED", "COMPLETED"})
+
+
+def delete_research_task(db: Session, task_id: str) -> None:
+    task = db.get(m.ResearchTask, task_id)
+    if task is None:
+        raise api_error(404, "RESEARCH_TASK_NOT_FOUND", f"研究任务 {task_id} 不存在")
+    if task.status not in DELETABLE_RESEARCH_TASK_STATUSES:
+        raise api_error(400, "RESEARCH_TASK_NOT_DELETABLE", "进行中的研究任务不能删除")
+
+    report_id = task.report_id
+    db.delete(task)
+
+    if report_id:
+        # Keep watchlist/monitoring rows; only drop the dangling report reference.
+        db.query(m.WatchlistItem).filter(m.WatchlistItem.report_id == report_id).update({"report_id": None})
+        db.query(m.MonitoringItem).filter(m.MonitoringItem.report_id == report_id).update({"report_id": None})
+        report = db.get(m.ResearchReport, report_id)
+        if report is not None:
+            db.delete(report)
+
+    db.commit()
+
+
 def require_stock(db: Session, code: str) -> m.Stock:
     normalized_code = normalize_stock_code(code)[0]
     stock = db.get(m.Stock, normalized_code)

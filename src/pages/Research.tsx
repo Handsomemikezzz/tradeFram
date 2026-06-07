@@ -97,6 +97,22 @@ export default function Research() {
     }
   };
 
+  const deleteRecord = async (record: ResearchRecordResponse) => {
+    if (record.status !== 'FAILED' && record.status !== 'COMPLETED') return;
+    const confirmMessage = record.status === 'COMPLETED'
+      ? `确认删除 ${record.name}（${record.code}）的已完成研究记录？关联报告将一并删除，此操作不可恢复。`
+      : `确认删除 ${record.name}（${record.code}）的失败研究记录？`;
+    if (!window.confirm(confirmMessage)) return;
+    try {
+      await researchApi.deleteTask(record.taskId);
+      toast.success('研究记录已删除');
+      loadRecords();
+      loadStats();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '删除研究记录失败');
+    }
+  };
+
   const addMonitoring = async (record: ResearchRecordResponse) => {
     try {
       await monitoringApi.addMonitoringItem({ code: record.code, enabled: true, source: 'RESEARCH_RECORD', reportId: record.reportId });
@@ -213,6 +229,9 @@ export default function Research() {
                         <button className="hover:underline" onClick={() => navigate(`/research/${record.code}`)}>查看报告</button>
                         <button className="text-gray-400 hover:text-blue-500" onClick={() => addWatchlist(record)}>加入观察池</button>
                         <button className="text-gray-400 hover:text-orange-500" onClick={() => addMonitoring(record)}>加入交易监控池</button>
+                        {(record.status === 'FAILED' || record.status === 'COMPLETED') && (
+                          <button className="text-gray-400 hover:text-red-500" onClick={() => deleteRecord(record)}>删除</button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
