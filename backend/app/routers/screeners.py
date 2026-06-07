@@ -15,6 +15,7 @@ from ..services.screeners import (
     ScreenerError,
     SUPPORTED_STRATEGIES,
     generate_pattern_a_snapshot,
+    generate_uptrend_snapshot,
     get_default_screener_snapshot,
     get_screener_item,
     get_screener_snapshot,
@@ -29,7 +30,10 @@ def create_screener_snapshot(payload: ScreenerSnapshotCreate, db: Session = Depe
     if payload.strategyType not in SUPPORTED_STRATEGIES:
         raise api_error(400, "SCREENER_UNSUPPORTED_STRATEGY", f"暂不支持的策略类型: {payload.strategyType}")
     try:
-        snapshot = generate_pattern_a_snapshot(db, payload.tradeDate, provider=payload.provider)
+        if payload.strategyType == "uptrend":
+            snapshot = generate_uptrend_snapshot(db, payload.tradeDate, provider=payload.provider)
+        else:
+            snapshot = generate_pattern_a_snapshot(db, payload.tradeDate, provider=payload.provider)
         db.commit()
         db.refresh(snapshot)
     except ScreenerError as exc:

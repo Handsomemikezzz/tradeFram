@@ -142,22 +142,47 @@ export function PatternAChart({ bars, markers = [], height = CHART_HEIGHT }: Pro
     ma10Ref.current.setData(bars.filter((bar) => bar.ma10 !== null).map((bar) => ({ time: bar.tradeDate, value: bar.ma10 as number })));
     ma20Ref.current.setData(bars.filter((bar) => bar.ma20 !== null).map((bar) => ({ time: bar.tradeDate, value: bar.ma20 as number })));
 
+    // Pattern A markers
     const keyMarker = markers.find((marker) => marker.kind === 'key_bearish');
     const confirmMarker = markers.find((marker) => marker.kind === 'confirm');
-    const markersToShow = [keyMarker, confirmMarker].filter(Boolean) as ScreenerMarkerResponse[];
+    // Uptrend markers
+    const trendStartMarker = markers.find((marker) => marker.kind === 'trend_start');
+    const recentHighMarker = markers.find((marker) => marker.kind === 'recent_high');
+    const pullbackMarker = markers.find((marker) => marker.kind === 'pullback');
+
+    const markersToShow = [
+      keyMarker,
+      confirmMarker,
+      trendStartMarker,
+      recentHighMarker,
+      pullbackMarker,
+    ].filter(Boolean) as ScreenerMarkerResponse[];
+
     markersRef.current?.setMarkers(
-      markersToShow.map((marker) => ({
-        time: marker.tradeDate,
-        position: marker.kind === 'key_bearish' ? 'aboveBar' : 'belowBar',
-        color: marker.kind === 'key_bearish' ? '#7F1D1D' : '#B45309',
-        shape: marker.kind === 'key_bearish' ? 'arrowDown' : 'arrowUp',
-        text: marker.label,
-      })),
+      markersToShow.map((marker) => {
+        if (marker.kind === 'key_bearish') {
+          return { time: marker.tradeDate, position: 'aboveBar' as const, color: '#7F1D1D', shape: 'arrowDown' as const, text: marker.label };
+        }
+        if (marker.kind === 'confirm') {
+          return { time: marker.tradeDate, position: 'belowBar' as const, color: '#B45309', shape: 'arrowUp' as const, text: marker.label };
+        }
+        if (marker.kind === 'trend_start') {
+          return { time: marker.tradeDate, position: 'belowBar' as const, color: '#059669', shape: 'circle' as const, text: marker.label };
+        }
+        if (marker.kind === 'recent_high') {
+          return { time: marker.tradeDate, position: 'aboveBar' as const, color: '#D97706', shape: 'arrowDown' as const, text: marker.label };
+        }
+        if (marker.kind === 'pullback') {
+          return { time: marker.tradeDate, position: 'belowBar' as const, color: '#2563EB', shape: 'arrowUp' as const, text: marker.label };
+        }
+        return { time: marker.tradeDate, position: 'belowBar' as const, color: '#6B7280', shape: 'circle' as const, text: marker.label };
+      }),
     );
     if (chartRef.current) {
       applyDefaultVisibleRange(chartRef.current, bars.length);
     }
   }, [bars, markers]);
+
 
   return (
     <div className="space-y-1">

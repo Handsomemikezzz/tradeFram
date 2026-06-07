@@ -35,6 +35,7 @@ class SyncOptions:
     limit: int | None = None
     codes: list[str] | None = None
     board_filter: str | None = None
+    price_adjustments: tuple[str, ...] = PRICE_ADJUSTMENTS
     sleep: float = 0.0
     max_retries: int = 1
     retry_backoff: float = 1.0
@@ -114,7 +115,7 @@ def _run_sync(
         daily_success_items = 0
         daily_failed_items = 0
         for instrument in selected_instruments:
-            for price_adjustment in PRICE_ADJUSTMENTS:
+            for price_adjustment in options.price_adjustments:
                 item_key = f"{instrument.code}:{price_adjustment}"
                 if item_key in completed_daily:
                     skipped_items += 1

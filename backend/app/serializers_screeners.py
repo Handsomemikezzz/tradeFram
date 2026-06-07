@@ -46,6 +46,10 @@ def screener_snapshot_payload(snapshot: m.ScreenerSnapshot, db: Session | None =
 
 
 def screener_item_summary_payload(item: m.ScreenerItem, *, in_watchlist: bool) -> dict:
+    reason = item.reason or {}
+    regulatory = reason.get("regulatory") or {}
+    trend = reason.get("trend") or {}
+    volume = reason.get("volume") or {}
     return {
         "id": item.id,
         "snapshotId": item.snapshot_id,
@@ -62,6 +66,17 @@ def screener_item_summary_payload(item: m.ScreenerItem, *, in_watchlist: bool) -
         "changePercent": item.change_percent,
         "tags": item.tags,
         "inWatchlist": in_watchlist,
+        # uptrend-specific (None for other strategies)
+        "setupType": reason.get("setupType"),
+        "setupLabel": reason.get("setupLabel"),
+        "indexCode": regulatory.get("indexCode"),
+        "indexName": regulatory.get("indexName"),
+        "deviation3Percent": regulatory.get("deviation3Percent"),
+        "deviation10Percent": regulatory.get("deviation10Percent"),
+        "deviation30Percent": regulatory.get("deviation30Percent"),
+        "distanceToMa10Percent": trend.get("distanceToMa10Percent"),
+        "avgAmount20": volume.get("avgAmount20"),
+        "avgAmount5": volume.get("avgAmount5"),
     }
 
 

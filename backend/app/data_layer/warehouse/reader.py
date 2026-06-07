@@ -41,6 +41,22 @@ class WarehousePriceBar:
     fetched_at: datetime
 
 
+@dataclass(frozen=True)
+class WarehouseIndexBar:
+    index_code: str
+    symbol: str
+    name: str
+    trade_date: date
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+    amount: float
+    source: str
+    fetched_at: datetime
+
+
 class WarehouseMarketDataStore:
     def __init__(self, data_root: Path | str | None = None):
         self.data_root = Path(data_root or os.getenv("DATA_ROOT", "data"))
@@ -53,6 +69,10 @@ class WarehouseMarketDataStore:
     @property
     def instruments_path(self) -> Path:
         return self.data_root / "warehouse" / "instruments"
+
+    @property
+    def index_daily_bars_path(self) -> Path:
+        return self.data_root / "warehouse" / "index_daily_bars"
 
     @property
     def trading_calendar_path(self) -> Path:
@@ -242,6 +262,57 @@ class WarehouseMarketDataStore:
         return frame[values == requested]
 
 
+    def get_index_daily_bars(
+        self,
+        index_code: str,
+        *,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        limit: int | None = None,
+    ) -> list[WarehouseIndexBar]:
+        frame = self.index_daily_bars_frame(index_code=index_code, start_date=start_date, end_date=end_date)
+        if frame.empty:
+            return []
+        frame = frame.sort_values("trade_date")
+        if limit is not None:
+            frame = frame.tail(limit)
+        return [_index_bar_from_row(row) for row in frame.itertuples(index=False)]
+
+    def index_daily_bars_frame(
+        self,
+        *,
+        index_code: str,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        columns: list[str] | None = None,
+    ) -> pd.DataFrame:
+        if not self.index_daily_bars_path.exists():
+            return pd.DataFrame()
+        required_columns = set(columns or [])
+        required_columns.update({"index_code", "trade_date"})
+        normalized = str(index_code).upper()
+        partition = self.index_daily_bars_path / f"index_code={normalized}"
+        if partition.exists():
+            frame = self.store.read_dataset(partition, columns=sorted(required_columns) if columns is not None else None)
+        else:
+            frame = self.store.read_dataset(
+                self.index_daily_bars_path,
+                columns=sorted(required_columns) if columns is not None else None,
+            )
+        if frame.empty:
+            return frame
+        if "index_code" not in frame.columns:
+            frame["index_code"] = normalized
+        frame["index_code"] = frame["index_code"].astype(str).str.upper()
+        frame["trade_date"] = pd.to_datetime(frame["trade_date"]).dt.date
+        frame = frame[frame["index_code"] == normalized]
+        if start_date is not None:
+            frame = frame[frame["trade_date"] >= start_date]
+        if end_date is not None:
+            frame = frame[frame["trade_date"] <= end_date]
+        return frame
+
+
 def _daily_bar_filters(*, start_date: date | None, end_date: date | None, price_adjustment: str):
     filters = []
     if start_date is not None:
@@ -254,6 +325,32 @@ def _daily_bar_filters(*, start_date: date | None, end_date: date | None, price_
     else:
         filters.append(("price_adjustment", "==", requested))
     return filters or None
+
+
+def _index_bar_from_row(row) -> WarehouseIndexBar:
+    source_updated_at = getattr(row, "source_updated_at", None)
+    if isinstance(source_updated_at, pd.Timestamp):
+        fetched_at = source_updated_at.to_pydatetime()
+    elif isinstance(source_updated_at, datetime):
+        fetched_at = source_updated_at
+    else:
+        fetched_at = datetime.now(UTC)
+    if fetched_at.tzinfo is None:
+        fetched_at = fetched_at.replace(tzinfo=UTC)
+    return WarehouseIndexBar(
+        index_code=str(row.index_code).upper(),
+        symbol=str(row.symbol),
+        name=str(row.name),
+        trade_date=row.trade_date,
+        open=float(row.open),
+        high=float(row.high),
+        low=float(row.low),
+        close=float(row.close),
+        volume=int(row.volume),
+        amount=float(row.amount),
+        source="warehouse",
+        fetched_at=fetched_at,
+    )
 
 
 def _bar_from_row(row) -> WarehousePriceBar:

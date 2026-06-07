@@ -20,6 +20,7 @@ class FakeDataLayerProvider:
 
     def __init__(self):
         self.daily_calls: list[str] = []
+        self.daily_bar_requests: list[tuple[str, str]] = []
 
     def list_instruments(self):
         return [
@@ -36,6 +37,7 @@ class FakeDataLayerProvider:
 
     def get_daily_bars(self, code: str, start_date: date, end_date: date, *, price_adjustment: str = "raw"):
         self.daily_calls.append(f"{code}:{price_adjustment}")
+        self.daily_bar_requests.append((code, price_adjustment))
         return [
             DataLayerDailyBar(code, f"{code}.SH" if code.startswith("6") else f"{code}.SZ", "SH" if code.startswith("6") else "SZ", date(2026, 4, 29), 10, 11, 9, 10.5, 100, 1000, price_adjustment),
             DataLayerDailyBar(code, f"{code}.SH" if code.startswith("6") else f"{code}.SZ", "SH" if code.startswith("6") else "SZ", date(2026, 4, 30), 10.5, 12, 10, 11.5, 100, 1200, price_adjustment),
@@ -264,3 +266,20 @@ def test_merge_warehouse_reads_only_matching_partition(tmp_path):
     result = store.read_dataset(path)
     assert len(result[result["code"] == "600519"]) == 2
     assert len(result[result["code"] == "000001"]) == 1
+
+
+def test_sync_daily_data_uses_requested_price_adjustments(tmp_path):
+    provider = FakeDataLayerProvider()
+    result = sync_daily_data(
+        SyncOptions(
+            data_root=tmp_path / "data",
+            end_date=date(2026, 4, 30),
+            lookback_days=1,
+            price_adjustments=("raw", "qfq"),
+        ),
+        provider=provider,
+    )
+
+    assert result.status == "success"
+    assert ("600519", "raw") in provider.daily_bar_requests
+    assert ("600519", "qfq") in provider.daily_bar_requests

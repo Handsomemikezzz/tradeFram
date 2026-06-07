@@ -346,6 +346,17 @@ export interface ScreenerItemSummaryResponse {
   changePercent: number | null;
   tags: string[];
   inWatchlist: boolean;
+  // uptrend-specific nullable fields
+  setupType?: string | null;
+  setupLabel?: string | null;
+  indexCode?: string | null;
+  indexName?: string | null;
+  deviation3Percent?: number | null;
+  deviation10Percent?: number | null;
+  deviation30Percent?: number | null;
+  distanceToMa10Percent?: number | null;
+  avgAmount20?: number | null;
+  avgAmount5?: number | null;
 }
 
 export interface ScreenerDailyBarResponse {
@@ -365,7 +376,7 @@ export interface ScreenerDailyBarResponse {
 export interface ScreenerMarkerResponse {
   tradeDate: string;
   endDate?: string;
-  kind: 'key_bearish' | 'stabilization' | 'confirm';
+  kind: 'key_bearish' | 'stabilization' | 'confirm' | 'trend_start' | 'recent_high' | 'pullback';
   label: string;
 }
 

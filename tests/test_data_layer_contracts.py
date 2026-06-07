@@ -120,7 +120,9 @@ def test_warehouse_schemas_are_stable_contracts(dataset: str, columns: list[str]
 def test_core_indexes_cover_first_phase_scope():
     assert CORE_INDEXES == {
         "000001.SH": "上证指数",
+        "000002.SH": "上证A股指数",
         "399001.SZ": "深证成指",
+        "399107.SZ": "深证A股指数",
         "399006.SZ": "创业板指",
         "000300.SH": "沪深300",
         "000905.SH": "中证500",

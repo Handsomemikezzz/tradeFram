@@ -6,11 +6,12 @@
 import React, { useState } from 'react';
 import { CalendarDays, Filter } from 'lucide-react';
 import { PatternATab } from '@/components/screener/PatternATab';
+import { UptrendTab } from '@/components/screener/UptrendTab';
 import { Input } from '@/components/ui/input';
 import LimitUpBreakMonitor from '@/pages/LimitUpBreakMonitor';
 import { cn } from '@/lib/utils';
 
-type TabKey = 'pattern_a' | 'limit_up_break';
+type TabKey = 'pattern_a' | 'limit_up_break' | 'uptrend';
 
 function todayText(): string {
   const now = new Date();
@@ -48,9 +49,12 @@ export default function Screeners() {
       <div className="flex gap-2 border-b border-gray-200">
         <TabButton active={tab === 'pattern_a'} onClick={() => setTab('pattern_a')}>走势 A</TabButton>
         <TabButton active={tab === 'limit_up_break'} onClick={() => setTab('limit_up_break')}>断板</TabButton>
+        <TabButton active={tab === 'uptrend'} onClick={() => setTab('uptrend')}>上行趋势</TabButton>
       </div>
 
-      {tab === 'pattern_a' ? <PatternATab tradeDate={tradeDate} /> : <LimitUpBreakMonitor embedded tradeDate={tradeDate} onTradeDateChange={setTradeDate} />}
+      {tab === 'pattern_a' && <PatternATab tradeDate={tradeDate} />}
+      {tab === 'limit_up_break' && <LimitUpBreakMonitor embedded tradeDate={tradeDate} onTradeDateChange={setTradeDate} />}
+      {tab === 'uptrend' && <UptrendTab tradeDate={tradeDate} />}
     </div>
   );
 }

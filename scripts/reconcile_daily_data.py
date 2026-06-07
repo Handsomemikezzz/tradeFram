@@ -75,6 +75,7 @@ def run(argv: list[str] | None = None) -> int:
             end_date=sync_end_date,
             lookback_days=args.lookback_days,
             board_filter=None if args.board_filter == "all" else args.board_filter,
+            price_adjustments=tuple(args.price_adjustment or ["raw"]),
             sleep=args.sleep,
             max_retries=args.max_retries,
             retry_backoff=args.retry_backoff,
@@ -130,6 +131,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--circuit-breaker-failure-rate", type=float, default=1.0)
     parser.add_argument("--threshold", type=int, default=2)
     parser.add_argument("--now", help="Override current CN time for tests, ISO-8601 format.")
+    parser.add_argument(
+        "--price-adjustment",
+        action="append",
+        choices=["raw", "qfq", "hfq"],
+        default=None,
+        dest="price_adjustment",
+        help="Daily bar price adjustment to sync. Repeat to sync multiple. Default: raw.",
+    )
     return parser
 
 

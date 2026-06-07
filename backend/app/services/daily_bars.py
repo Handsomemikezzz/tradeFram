@@ -97,6 +97,36 @@ def daily_bar_payload(point: DailyBarPoint) -> dict:
 
 def build_markers_from_reason(reason: dict) -> list[dict]:
     markers: list[dict] = []
+    strategy_type = reason.get("strategyType", "pattern_a")
+
+    if strategy_type == "uptrend":
+        trend = reason.get("trend") or {}
+        if trend.get("trendStartDate"):
+            markers.append(
+                {
+                    "tradeDate": trend["trendStartDate"],
+                    "kind": "trend_start",
+                    "label": "趋势起点",
+                }
+            )
+        if trend.get("recentHighDate"):
+            markers.append(
+                {
+                    "tradeDate": trend["recentHighDate"],
+                    "kind": "recent_high",
+                    "label": "20日高点",
+                }
+            )
+        if trend.get("pullbackDate"):
+            markers.append(
+                {
+                    "tradeDate": trend["pullbackDate"],
+                    "kind": "pullback",
+                    "label": reason.get("setupLabel", "回踩/推进"),
+                }
+            )
+        return markers
+
     key_bar = reason.get("keyBearishBar") or {}
     if key_bar.get("tradeDate"):
         markers.append(
