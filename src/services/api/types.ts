@@ -136,6 +136,7 @@ export interface ResearchTaskResponse {
   status: string;
   currentStep: string;
   progressPct: number;
+  errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
   reportId: string | null;
@@ -190,6 +191,23 @@ export interface ResearchReportResponse {
     roe: number;
     pe: number;
   } | null;
+  tradingAgentsDecision: {
+    rating: string;
+    executiveSummary: string;
+    investmentThesis: string;
+    priceTarget: string;
+    timeHorizon: string;
+    yahooTicker: string;
+  } | null;
+  tradingAgentsSections: {
+    market?: string;
+    sentiment?: string;
+    news?: string;
+    fundamentals?: string;
+    researchTeam?: string;
+    trader?: string;
+    portfolioManager?: string;
+  };
   report: {
     overview: string;
     keyInsights: string[];

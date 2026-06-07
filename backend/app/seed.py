@@ -98,3 +98,9 @@ def _ensure_lightweight_schema() -> None:
         if "images" not in event_cols:
             conn.exec_driver_sql("ALTER TABLE stock_review_events ADD COLUMN images JSON NOT NULL DEFAULT '[]'")
 
+        report_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(research_report)").fetchall()}
+        if "ai_decision" not in report_cols:
+            conn.exec_driver_sql("ALTER TABLE research_report ADD COLUMN ai_decision JSON NOT NULL DEFAULT '{}'")
+        if "ai_raw_result" not in report_cols:
+            conn.exec_driver_sql("ALTER TABLE research_report ADD COLUMN ai_raw_result JSON NOT NULL DEFAULT '{}'")
+

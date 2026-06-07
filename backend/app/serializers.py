@@ -82,6 +82,7 @@ def research_task_payload(task: m.ResearchTask) -> dict:
         "status": task.status,
         "currentStep": task.current_step,
         "progressPct": task.progress_pct,
+        "errorMessage": task.error_message,
         "createdAt": dt_iso(task.created_at),
         "updatedAt": dt_iso(task.updated_at),
         "reportId": task.report_id,
@@ -132,6 +133,8 @@ def research_report_payload(report: m.ResearchReport) -> dict:
         "quote": quote_payload(stock),
         "trend": trend_payload(stock),
         "financialSnapshot": financial_snapshot_payload(financial) if financial else None,
+        "tradingAgentsDecision": report.ai_decision or None,
+        "tradingAgentsSections": (report.ai_raw_result or {}).get("sections", {}),
         "report": {
             "overview": report.overview,
             "keyInsights": _merge_live_price_insights(report.key_insights, stock),

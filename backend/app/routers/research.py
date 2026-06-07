@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -8,15 +8,16 @@ from .. import models as m
 from ..database import get_db
 from ..schemas import ResearchTaskCreate
 from ..serializers import research_record_payload, research_report_payload, research_task_payload
-from ..services.research import create_research_task
+from ..services.research import create_research_task, run_research_task
 from ..utils import api_error, ok
 
 router = APIRouter()
 
 
 @router.post("/research/tasks")
-def create_task(payload: ResearchTaskCreate, db: Session = Depends(get_db)):
+def create_task(payload: ResearchTaskCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     task = create_research_task(db, payload)
+    background_tasks.add_task(run_research_task, task.id, payload.model_dump(mode="json"))
     return ok(research_task_payload(task))
 
 

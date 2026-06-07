@@ -60,7 +60,7 @@ export const newsTypeLabel = (type: string) => ({
 }[type] || type);
 
 export const researchStepIndex = (step: string) => {
-  const steps = ['IDENTIFY_STOCK', 'FETCH_MARKET', 'FETCH_FINANCIALS', 'FETCH_NEWS', 'GENERATE_AI_REPORT', 'DONE'];
+  const steps = ['IDENTIFY_STOCK', 'FETCH_MARKET_DATA', 'RUN_TRADING_AGENTS', 'NORMALIZE_REPORT', 'DONE'];
   const idx = steps.indexOf(step);
   return idx >= 0 ? idx : 0;
 };

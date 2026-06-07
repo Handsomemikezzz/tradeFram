@@ -13,7 +13,57 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { dataApi, formatDateTime, monitoringApi, newsTypeLabel, researchApi, ResearchReportResponse, StockDataStatusResponse } from '@/services/api';
+
+const ratingTone = (rating?: string) => {
+  const normalized = (rating || '').toLowerCase();
+  if (['buy', 'overweight'].includes(normalized)) return 'text-red-700 bg-red-50 border-red-100';
+  if (['sell', 'underweight'].includes(normalized)) return 'text-green-700 bg-green-50 border-green-100';
+  return 'text-blue-700 bg-blue-50 border-blue-100';
+};
+
+const agentSectionLabels: Array<[keyof NonNullable<ResearchReportResponse['tradingAgentsSections']>, string]> = [
+  ['market', 'Market Analyst'],
+  ['sentiment', 'Sentiment Analyst'],
+  ['news', 'News Analyst'],
+  ['fundamentals', 'Fundamentals Analyst'],
+  ['researchTeam', 'Research Team'],
+  ['trader', 'Trader'],
+  ['portfolioManager', 'Portfolio Manager'],
+];
+
+const MarkdownBlock = ({ content }: { content: string }) => (
+  <ReactMarkdown
+    remarkPlugins={[remarkGfm]}
+    components={{
+      h1: ({ children }) => <h1 className="mt-2 mb-4 text-xl font-black tracking-tight text-gray-950">{children}</h1>,
+      h2: ({ children }) => <h2 className="mt-6 mb-3 border-b border-gray-100 pb-2 text-base font-black text-gray-900">{children}</h2>,
+      h3: ({ children }) => <h3 className="mt-5 mb-2 text-sm font-bold text-gray-900">{children}</h3>,
+      h4: ({ children }) => <h4 className="mt-4 mb-2 text-xs font-bold uppercase tracking-wider text-gray-600">{children}</h4>,
+      p: ({ children }) => <p className="my-3 text-[12px] leading-6 text-gray-700">{children}</p>,
+      strong: ({ children }) => <strong className="font-black text-gray-900">{children}</strong>,
+      ul: ({ children }) => <ul className="my-3 list-disc space-y-1.5 pl-5 text-[12px] leading-6 text-gray-700">{children}</ul>,
+      ol: ({ children }) => <ol className="my-3 list-decimal space-y-1.5 pl-5 text-[12px] leading-6 text-gray-700">{children}</ol>,
+      li: ({ children }) => <li className="pl-1">{children}</li>,
+      hr: () => <hr className="my-6 border-gray-100" />,
+      table: ({ children }) => (
+        <div className="my-4 overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-full border-collapse text-[11px]">{children}</table>
+        </div>
+      ),
+      thead: ({ children }) => <thead className="bg-gray-50 text-gray-600">{children}</thead>,
+      th: ({ children }) => <th className="border-b border-gray-200 px-3 py-2 text-left font-black">{children}</th>,
+      td: ({ children }) => <td className="border-b border-gray-100 px-3 py-2 align-top text-gray-700">{children}</td>,
+      code: ({ children }) => <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-900">{children}</code>,
+      pre: ({ children }) => <pre className="my-4 overflow-x-auto rounded-lg bg-gray-950 p-4 text-[11px] leading-5 text-gray-100">{children}</pre>,
+      blockquote: ({ children }) => <blockquote className="my-4 border-l-4 border-blue-200 bg-blue-50/50 px-4 py-2 text-gray-700">{children}</blockquote>,
+    }}
+  >
+    {content}
+  </ReactMarkdown>
+);
 
 export default function ReportDetail() {
   const { code } = useParams();
@@ -100,6 +150,10 @@ export default function ReportDetail() {
 
   const isPositive = report.quote.change >= 0;
   const aiConfidenceLabel = report.report.aiConfidence === null ? '暂无' : `${Math.round(report.report.aiConfidence * 100)}%`;
+  const decision = report.tradingAgentsDecision;
+  const agentSections = agentSectionLabels
+    .map(([key, label]) => ({ key, label, content: report.tradingAgentsSections?.[key] || '' }))
+    .filter(section => section.content.trim().length > 0);
   const financialItems = report.financialSnapshot
     ? [
         { label: '营业收入', value: report.financialSnapshot.revenue },
@@ -190,6 +244,46 @@ export default function ReportDetail() {
           </CardContent>
         </Card>
 
+        {decision && (
+          <Card className="lg:col-span-4 border border-blue-100 bg-white shadow-sm rounded-lg overflow-hidden">
+            <CardHeader className="px-4 py-3 bg-blue-50/60 border-b border-blue-100">
+              <CardTitle className="text-[10px] font-bold uppercase tracking-wider text-blue-700 flex items-center gap-2 italic font-serif">
+                <Sparkles className="w-3.5 h-3.5" /> TradingAgents Decision
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className={cn('rounded border p-3', ratingTone(decision.rating))}>
+                  <div className="text-[9px] font-bold uppercase tracking-widest">Rating</div>
+                  <div className="text-lg font-black font-mono mt-1">{decision.rating}</div>
+                </div>
+                <div className="rounded border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Price Target</div>
+                  <div className="text-lg font-black font-mono mt-1">{decision.priceTarget || '-'}</div>
+                </div>
+                <div className="rounded border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Time Horizon</div>
+                  <div className="text-lg font-black font-mono mt-1">{decision.timeHorizon || '-'}</div>
+                </div>
+                <div className="rounded border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">Yahoo Ticker</div>
+                  <div className="text-lg font-black font-mono mt-1">{decision.yahooTicker}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                  <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">Executive Summary</div>
+                  <p className="text-[12px] leading-relaxed text-gray-800 whitespace-pre-wrap">{decision.executiveSummary}</p>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-2">Investment Thesis</div>
+                  <p className="text-[12px] leading-relaxed text-gray-800 whitespace-pre-wrap">{decision.investmentThesis || '暂无完整投资论点。'}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="lg:col-span-4 mt-2">
           <Card className="border border-blue-100 bg-blue-50/40 shadow-sm rounded-lg mb-4">
             <CardContent className="p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 text-[10px]">
@@ -208,6 +302,7 @@ export default function ReportDetail() {
               <TabsTrigger value="business" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">主营业务</TabsTrigger>
               <TabsTrigger value="financial" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">财务概览</TabsTrigger>
               <TabsTrigger value="news" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">新闻公告</TabsTrigger>
+              <TabsTrigger value="agents" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">Agent 辩论</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
@@ -298,6 +393,24 @@ export default function ReportDetail() {
                   ))}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="agents" className="space-y-4">
+              {agentSections.length === 0 && (
+                <Card className="border-none shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)]">
+                  <CardContent className="p-6 text-sm text-gray-400">暂无 TradingAgents 原始分析内容。</CardContent>
+                </Card>
+              )}
+              {agentSections.map(section => (
+                <Card key={section.key} className="border border-gray-200 shadow-sm rounded-lg overflow-hidden">
+                  <CardHeader className="px-4 py-3 bg-gray-50/70 border-b border-gray-100">
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-wider text-gray-600 italic font-serif">{section.label}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <MarkdownBlock content={section.content} />
+                  </CardContent>
+                </Card>
+              ))}
             </TabsContent>
           </Tabs>
         </div>

@@ -14,7 +14,9 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { STEPS, ResearchStepper } from '@/components/research/ResearchStepper';
 import { useNavigate } from 'react-router-dom';
-import { formatDateTime, monitoringApi, reportStatusLabel, researchApi, ResearchRecordResponse, ResearchStatsResponse, researchStepIndex } from '@/services/api';
+import { formatDateTime, monitoringApi, reportStatusLabel, researchApi, ResearchRecordResponse, ResearchStatsResponse, ResearchTaskResponse, researchStepIndex } from '@/services/api';
+
+const sleep = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
 export default function Research() {
   const navigate = useNavigate();
@@ -58,8 +60,8 @@ export default function Research() {
 
     try {
       const created = await researchApi.createTask({ code: stockCode, source: 'FRONTEND' });
-      const latest = await researchApi.getTask(created.taskId);
-      setStep(Math.min(researchStepIndex(latest.currentStep), STEPS.length - 1));
+      setStep(Math.min(researchStepIndex(created.currentStep), STEPS.length - 1));
+      const latest = await pollResearchTask(created);
       toast.success('研究报告已生成，点击查看！');
       setStockCode('');
       loadRecords();
@@ -70,6 +72,20 @@ export default function Research() {
     } finally {
       setIsResearching(false);
     }
+  };
+
+  const pollResearchTask = async (initialTask: ResearchTaskResponse) => {
+    let latest = initialTask;
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      if (latest.status === 'COMPLETED') return latest;
+      if (latest.status === 'FAILED') {
+        throw new Error(latest.errorMessage || 'TradingAgents 研究任务失败');
+      }
+      await sleep(2000);
+      latest = await researchApi.getTask(initialTask.taskId);
+      setStep(Math.min(researchStepIndex(latest.currentStep), STEPS.length - 1));
+    }
+    throw new Error('TradingAgents 研究任务超时，请稍后在研究记录中查看结果');
   };
 
   const addWatchlist = async (record: ResearchRecordResponse) => {

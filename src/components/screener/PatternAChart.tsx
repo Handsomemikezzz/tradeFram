@@ -13,6 +13,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type Time,
 } from 'lightweight-charts';
 import { ScreenerDailyBarResponse, ScreenerMarkerResponse } from '@/services/api';
 
@@ -45,7 +46,7 @@ export function PatternAChart({ bars, markers = [], height = CHART_HEIGHT }: Pro
   const ma5Ref = useRef<ISeriesApi<'Line'> | null>(null);
   const ma10Ref = useRef<ISeriesApi<'Line'> | null>(null);
   const ma20Ref = useRef<ISeriesApi<'Line'> | null>(null);
-  const markersRef = useRef<ISeriesMarkersPluginApi<string> | null>(null);
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const barCountRef = useRef(0);
 
   useEffect(() => {

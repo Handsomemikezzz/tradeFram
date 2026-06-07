@@ -6,10 +6,9 @@ import { Progress } from '@/components/ui/progress';
 
 export const STEPS = [
     '识别股票',
-    '获取行情',
-    '获取财务',
-    '获取新闻公告',
-    'AI 生成报告',
+    '获取行情数据',
+    '运行 TradingAgents',
+    '整理研究报告',
     '完成'
   ];
 

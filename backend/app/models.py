@@ -70,6 +70,8 @@ class ResearchReport(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
     research_base_period: Mapped[str] = mapped_column(String(32), nullable=False, default="2026-Q1")
     data_sources: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    ai_decision: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    ai_raw_result: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     stock: Mapped[Stock] = relationship()
 
