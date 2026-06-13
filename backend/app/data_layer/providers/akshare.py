@@ -84,13 +84,11 @@ class AkShareDataLayerProvider(DataLayerProvider):
         ]
 
     def _daily_bars_fallback_frame(self, ak, code: str, start_date: date, end_date: date, adjustment: str):
-        if adjustment != "raw":
-            raise RuntimeError(f"fallback daily bars only supports raw adjustment: {adjustment}")
         frame = ak.stock_zh_a_hist_tx(
             symbol=_prefixed_stock_symbol(code),
             start_date=start_date.strftime("%Y%m%d"),
             end_date=end_date.strftime("%Y%m%d"),
-            adjust="",
+            adjust="" if adjustment == "raw" else adjustment,
             timeout=30,
         )
         if frame is None or frame.empty:

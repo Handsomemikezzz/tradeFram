@@ -8,12 +8,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app.data_layer.sync.jobs import SyncOptions, sync_daily_data
+from scripts.sync_cli import add_price_adjustment_args, parse_price_adjustments
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Sync recent market data into the local warehouse.")
     _add_common_args(parser)
     parser.add_argument("--lookback-days", type=int, default=20)
+    add_price_adjustment_args(parser)
     args = parser.parse_args()
     result = sync_daily_data(
         SyncOptions(
@@ -24,6 +26,7 @@ def main() -> int:
             limit=args.limit,
             codes=_parse_codes(args.codes),
             board_filter=None if args.board_filter == "all" else args.board_filter,
+            price_adjustments=parse_price_adjustments(args.price_adjustment),
             sleep=args.sleep,
             max_retries=args.max_retries,
             retry_backoff=args.retry_backoff,

@@ -15,6 +15,7 @@ from backend.app.data_layer.sync.jobs import SyncOptions, sync_daily_data
 from backend.app.data_layer.warehouse.reader import WarehouseInstrument, WarehouseMarketDataStore
 from backend.app.services.limit_up_breaks import MIN_TARGET_COVERAGE, generate_limit_up_break_snapshot
 from backend.app.utils import CN_TZ
+from scripts.sync_cli import parse_price_adjustments
 
 
 @dataclass(frozen=True)
@@ -75,7 +76,7 @@ def run(argv: list[str] | None = None) -> int:
             end_date=sync_end_date,
             lookback_days=args.lookback_days,
             board_filter=None if args.board_filter == "all" else args.board_filter,
-            price_adjustments=tuple(args.price_adjustment or ["raw"]),
+            price_adjustments=parse_price_adjustments(args.price_adjustment),
             sleep=args.sleep,
             max_retries=args.max_retries,
             retry_backoff=args.retry_backoff,

@@ -8,12 +8,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app.data_layer.sync.jobs import SyncOptions, init_history_data
+from scripts.sync_cli import add_price_adjustment_args, parse_price_adjustments
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Initialize local historical market data warehouse.")
     _add_common_args(parser)
     parser.add_argument("--start-date", default="2020-01-01", help="History start date, YYYY-MM-DD.")
+    add_price_adjustment_args(parser)
     args = parser.parse_args()
     result = init_history_data(
         SyncOptions(
@@ -23,6 +25,7 @@ def main() -> int:
             end_date=_parse_date(args.end_date) if args.end_date else date.today(),
             limit=args.limit,
             codes=_parse_codes(args.codes),
+            price_adjustments=parse_price_adjustments(args.price_adjustment),
             sleep=args.sleep,
             max_retries=args.max_retries,
             retry_backoff=args.retry_backoff,

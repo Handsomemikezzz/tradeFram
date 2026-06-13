@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app.data_layer.providers.akshare import AkShareDataLayerProvider
 from backend.app.data_layer.sync.jobs import SyncOptions, sync_daily_data
+from scripts.sync_cli import add_price_adjustment_args, parse_price_adjustments
 
 
 def main() -> int:
@@ -27,6 +28,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--circuit-breaker-min-items", type=int, default=30)
     parser.add_argument("--circuit-breaker-failure-rate", type=float, default=0.8)
+    add_price_adjustment_args(parser)
     args = parser.parse_args()
 
     if args.provider.strip().lower() not in {"akshare", "ak"}:
@@ -41,6 +43,7 @@ def main() -> int:
             end_date=today,
             lookback_days=args.lookback_days,
             board_filter=None if args.board_filter == "all" else args.board_filter,
+            price_adjustments=parse_price_adjustments(args.price_adjustment),
             sleep=args.sleep,
             max_retries=args.max_retries,
             retry_backoff=args.retry_backoff,

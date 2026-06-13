@@ -18,7 +18,8 @@ from ..storage.paths import DataLayerPaths
 from ..warehouse.normalize import normalize_daily_bars, normalize_index_daily_bars, normalize_instruments, normalize_trading_calendar
 from ..warehouse.schemas import CORE_INDEXES
 
-PRICE_ADJUSTMENTS = ("raw",)
+# Uptrend screener needs qfq for MA trend checks and raw for limit-up / amount rules.
+PRICE_ADJUSTMENTS = ("raw", "qfq")
 
 
 class SyncCircuitBreaker(RuntimeError):

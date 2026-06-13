@@ -4,11 +4,11 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpRight, ArrowDownRight, BarChart3, Clock, Database, Globe, Newspaper, RefreshCw, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ArrowDownRight, BarChart3, Clock, Copy, Database, Download, Globe, Newspaper, RefreshCw, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { dataApi, formatDateTime, monitoringApi, newsTypeLabel, researchApi, ResearchReportResponse, StockDataStatusResponse } from '@/services/api';
+import { copyResearchReportMarkdown, downloadResearchReportMarkdown } from '@/lib/researchReportExport';
 
 const ratingTone = (rating?: string) => {
   const normalized = (rating || '').toLowerCase();
@@ -66,11 +67,13 @@ const MarkdownBlock = ({ content }: { content: string }) => (
 );
 
 export default function ReportDetail() {
+  const navigate = useNavigate();
   const { code } = useParams();
   const [report, setReport] = useState<ResearchReportResponse | null>(null);
   const [dataStatus, setDataStatus] = useState<StockDataStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -140,12 +143,57 @@ export default function ReportDetail() {
     }
   };
 
+  const copyReport = async () => {
+    if (!report) return;
+    setExporting(true);
+    try {
+      await copyResearchReportMarkdown(report);
+      toast.success('研究报告已复制到剪贴板');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '复制研究报告失败');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportReport = () => {
+    if (!report) return;
+    try {
+      downloadResearchReportMarkdown(report);
+      toast.success('研究报告已导出为 Markdown 文件');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '导出研究报告失败');
+    }
+  };
+
+  const goBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/research');
+  };
+
   if (loading) {
-    return <div className="p-8 text-center text-gray-400">正在加载研究报告...</div>;
+    return (
+      <div className="space-y-4">
+        <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-white border-gray-300" onClick={goBack}>
+          <ArrowLeft className="w-3 h-3 mr-1" />返回
+        </Button>
+        <div className="p-8 text-center text-gray-400">正在加载研究报告...</div>
+      </div>
+    );
   }
 
   if (error || !report) {
-    return <div className="p-8 text-center text-red-500">{error || '研究报告不存在'}</div>;
+    return (
+      <div className="space-y-4">
+        <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-white border-gray-300" onClick={goBack}>
+          <ArrowLeft className="w-3 h-3 mr-1" />返回
+        </Button>
+        <div className="p-8 text-center text-red-500">{error || '研究报告不存在'}</div>
+      </div>
+    );
   }
 
   const isPositive = report.quote.change >= 0;
@@ -167,6 +215,9 @@ export default function ReportDetail() {
 
   return (
     <div className="space-y-4">
+      <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-white border-gray-300" onClick={goBack}>
+        <ArrowLeft className="w-3 h-3 mr-1" />返回
+      </Button>
       <div className="flex items-end justify-between border-b border-gray-200 pb-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -184,7 +235,13 @@ export default function ReportDetail() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-white border-gray-300" onClick={copyReport} disabled={exporting}>
+            <Copy className="w-3 h-3 mr-1" />复制报告
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-white border-gray-300" onClick={exportReport}>
+            <Download className="w-3 h-3 mr-1" />导出 Markdown
+          </Button>
           <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-widest bg-white border-gray-300" onClick={refreshData} disabled={refreshing}>
             <RefreshCw className={cn('w-3 h-3 mr-1', refreshing && 'animate-spin')} />刷新数据
           </Button>
