@@ -440,8 +440,13 @@ export default function ReportDetail() {
                   <CardContent className="p-6 text-sm text-gray-400">暂无 TradingAgents 引擎输出。</CardContent>
                 </Card>
               ) : (
-                <div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
-                  <div className="flex-1 min-w-0 space-y-4 order-1">
+                <>
+                  <EngineReportToc
+                    sections={agentSections}
+                    activeKey={activeEngineSection}
+                    onJump={jumpToEngineSection}
+                  />
+                  <div className="space-y-4 lg:pr-60">
                     <EngineReportTocMobile
                       sections={agentSections}
                       activeKey={activeEngineSection}
@@ -462,13 +467,7 @@ export default function ReportDetail() {
                       </Card>
                     ))}
                   </div>
-                  <EngineReportToc
-                    sections={agentSections}
-                    activeKey={activeEngineSection}
-                    onJump={jumpToEngineSection}
-                    className="order-2"
-                  />
-                </div>
+                </>
               )}
             </TabsContent>
           </Tabs>
