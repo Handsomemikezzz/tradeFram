@@ -50,6 +50,25 @@ def screener_item_summary_payload(item: m.ScreenerItem, *, in_watchlist: bool) -
     regulatory = reason.get("regulatory") or {}
     trend = reason.get("trend") or {}
     volume = reason.get("volume") or {}
+
+    # Calculate R:R metrics for Pattern A
+    entry = None
+    stop_loss = None
+    target = None
+    rr = None
+
+    stabilization = reason.get("stabilization")
+    confirm_bar = reason.get("confirmBar")
+    if stabilization and confirm_bar:
+        box_low = stabilization.get("boxLow")
+        close_price = confirm_bar.get("close")
+        if box_low is not None and close_price is not None:
+            entry = round(close_price, 4)
+            stop_loss = round(box_low, 4)
+            target = round(entry + 2 * (entry - stop_loss), 4)
+            diff = entry - stop_loss
+            rr = round((target - entry) / diff, 2) if diff > 0 else 0.0
+
     return {
         "id": item.id,
         "snapshotId": item.snapshot_id,
@@ -66,6 +85,11 @@ def screener_item_summary_payload(item: m.ScreenerItem, *, in_watchlist: bool) -
         "changePercent": item.change_percent,
         "tags": item.tags,
         "inWatchlist": in_watchlist,
+        # R:R Metrics
+        "entry": entry,
+        "stopLoss": stop_loss,
+        "target": target,
+        "rr": rr,
         # uptrend-specific (None for other strategies)
         "setupType": reason.get("setupType"),
         "setupLabel": reason.get("setupLabel"),

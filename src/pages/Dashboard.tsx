@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { TodayTasks } from '@/components/dashboard/TodayTasks';
 import { MonitoringTable } from '@/components/dashboard/MonitoringTable';
+import { DailyFlow } from '@/components/dashboard/DailyFlow';
 import { auditApi, DashboardOverviewResponse, formatCurrency, formatTime, hotStockApi, HotStockSnapshotResponse, logLevelLabel, LogResponse, researchApi, systemApi } from '@/services/api';
 import { cn } from '@/lib/utils';
 import { Progress } from '@/components/ui/progress';
@@ -90,6 +91,9 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      {/* Daily Flow */}
+      <DailyFlow />
 
       {/* Today's Tasks */}
       <TodayTasks tasks={overview?.tasks} />

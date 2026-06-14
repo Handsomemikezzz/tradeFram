@@ -364,6 +364,10 @@ export interface ScreenerItemSummaryResponse {
   changePercent: number | null;
   tags: string[];
   inWatchlist: boolean;
+  entry?: number | null;
+  stopLoss?: number | null;
+  target?: number | null;
+  rr?: number | null;
   // uptrend-specific nullable fields
   setupType?: string | null;
   setupLabel?: string | null;

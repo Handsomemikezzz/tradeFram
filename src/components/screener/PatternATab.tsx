@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Eye, RefreshCw, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { PatternAChart } from '@/components/screener/PatternAChart';
@@ -42,6 +43,11 @@ function formatPercent(value: number | null): string {
 function sortItems(items: ScreenerItemSummaryResponse[]): ScreenerItemSummaryResponse[] {
   return [...items].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'CONFIRMED' ? -1 : 1;
+    if (a.status === 'CONFIRMED') {
+      const rrA = a.rr ?? 0;
+      const rrB = b.rr ?? 0;
+      if (rrB !== rrA) return rrB - rrA;
+    }
     if (b.score !== a.score) return b.score - a.score;
     return a.code.localeCompare(b.code);
   });
@@ -59,11 +65,13 @@ function snapshotErrorMessage(err: unknown): string {
 }
 
 export function PatternATab({ tradeDate }: Props) {
+  const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<ScreenerSnapshotResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('CONFIRMED');
+  const [filterLowRr, setFilterLowRr] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ScreenerItemDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -71,10 +79,15 @@ export function PatternATab({ tradeDate }: Props) {
   const [showRules, setShowRules] = useState(false);
 
   const filteredItems = useMemo(() => {
-    const items = sortItems(snapshot?.items || []);
-    if (statusFilter === 'ALL') return items;
-    return items.filter((item) => item.status === statusFilter);
-  }, [snapshot, statusFilter]);
+    let items = sortItems(snapshot?.items || []);
+    if (statusFilter !== 'ALL') {
+      items = items.filter((item) => item.status === statusFilter);
+    }
+    if (filterLowRr && statusFilter === 'CONFIRMED') {
+      items = items.filter((item) => (item.rr ?? 0) >= 2);
+    }
+    return items;
+  }, [snapshot, statusFilter, filterLowRr]);
 
   const loadSnapshot = async () => {
     setLoading(true);
@@ -84,7 +97,9 @@ export function PatternATab({ tradeDate }: Props) {
         ? await screenerApi.getSnapshot(tradeDate, { strategyType: 'pattern_a', provider: DEFAULT_PROVIDER })
         : await screenerApi.getDefaultSnapshot({ strategyType: 'pattern_a', provider: DEFAULT_PROVIDER });
       setSnapshot(data);
-      const nextItems = sortItems(data.items).filter((item) => statusFilter === 'ALL' || item.status === statusFilter);
+      const nextItems = sortItems(data.items)
+        .filter((item) => statusFilter === 'ALL' || item.status === statusFilter)
+        .filter((item) => !(filterLowRr && statusFilter === 'CONFIRMED' && (item.rr ?? 0) < 2));
       setSelectedId(nextItems[0]?.id ?? null);
     } catch (err) {
       setSnapshot(null);
@@ -110,7 +125,9 @@ export function PatternATab({ tradeDate }: Props) {
         strategyType: 'pattern_a',
       });
       setSnapshot(data);
-      const nextItems = sortItems(data.items).filter((item) => statusFilter === 'ALL' || item.status === statusFilter);
+      const nextItems = sortItems(data.items)
+        .filter((item) => statusFilter === 'ALL' || item.status === statusFilter)
+        .filter((item) => !(filterLowRr && statusFilter === 'CONFIRMED' && (item.rr ?? 0) < 2));
       setSelectedId(nextItems[0]?.id ?? null);
       toast.success('走势 A 快照已生成', {
         description: `已确认 ${data.confirmedCount}，待确认 ${data.pendingCount}`,
@@ -201,18 +218,31 @@ export function PatternATab({ tradeDate }: Props) {
         <Metric label="更新" value={snapshot ? formatDateTime(snapshot.updatedAt) : '-'} />
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {(['CONFIRMED', 'ALL', 'PENDING_CONFIRMATION'] as StatusFilter[]).map((value) => (
-          <Button
-            key={value}
-            size="sm"
-            variant={statusFilter === value ? 'default' : 'outline'}
-            className="h-7 text-[10px]"
-            onClick={() => setStatusFilter(value)}
-          >
-            {value === 'CONFIRMED' ? '已确认' : value === 'PENDING_CONFIRMATION' ? '待确认' : '全部'}
-          </Button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+        <div className="flex flex-wrap gap-2">
+          {(['CONFIRMED', 'ALL', 'PENDING_CONFIRMATION'] as StatusFilter[]).map((value) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={statusFilter === value ? 'default' : 'outline'}
+              className="h-7 text-[10px]"
+              onClick={() => setStatusFilter(value)}
+            >
+              {value === 'CONFIRMED' ? '已确认' : value === 'PENDING_CONFIRMATION' ? '待确认' : '全部'}
+            </Button>
+          ))}
+        </div>
+        {statusFilter === 'CONFIRMED' && (
+          <label className="flex items-center gap-1.5 text-[10px] text-slate-600 cursor-pointer bg-white border border-slate-200 px-2.5 py-1 rounded shadow-sm hover:bg-slate-50 select-none">
+            <input
+              type="checkbox"
+              checked={filterLowRr}
+              onChange={(e) => setFilterLowRr(e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+            />
+            <span className="font-semibold">过滤 R:R &lt; 2:1 标的</span>
+          </label>
+        )}
       </div>
 
       {(loading || generating) && <div className="text-sm text-gray-400 py-8 text-center">正在处理走势 A 快照...</div>}
@@ -254,6 +284,28 @@ export function PatternATab({ tradeDate }: Props) {
                       <Badge key={tag} className="text-[9px] bg-gray-100 text-gray-600 border-gray-200">{tag}</Badge>
                     ))}
                   </div>
+                  {item.entry !== undefined && item.entry !== null && item.stopLoss !== undefined && item.stopLoss !== null && (
+                    <div className="mt-2 grid grid-cols-4 gap-1 text-[10px] bg-slate-50 p-1.5 rounded border border-slate-100 font-mono text-center">
+                      <div>
+                        <div className="text-gray-400 text-[8px] scale-90">入场</div>
+                        <div className="font-bold text-gray-700">{item.entry.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-400 text-[8px] scale-90">止损</div>
+                        <div className="font-bold text-red-600">{item.stopLoss.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-400 text-[8px] scale-90">目标</div>
+                        <div className="font-bold text-emerald-600">{item.target ? item.target.toFixed(2) : '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-400 text-[8px] scale-90">R:R</div>
+                        <div className={cn("font-bold", item.rr && item.rr >= 2 ? "text-blue-600" : "text-amber-600")}>
+                          {item.rr ? `${item.rr.toFixed(1)}:1` : 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-2 flex items-center justify-between text-[10px] text-gray-500">
                     <span>信号 {item.signalDate}</span>
                     <span className="font-bold text-gray-800">评分 {item.score}</span>
@@ -307,6 +359,66 @@ export function PatternATab({ tradeDate }: Props) {
                     </div>
                   </div>
                   <PatternAChart bars={detail.bars} markers={detail.markers} />
+                  
+                  {/* Trade Math & One-click Plan Card */}
+                  {detail.entry !== undefined && detail.entry !== null && detail.stopLoss !== undefined && detail.stopLoss !== null && (
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-lg p-3 space-y-3">
+                      <div className="grid grid-cols-4 gap-2 text-center font-mono">
+                        <div>
+                          <span className="block text-[9px] uppercase tracking-wider text-blue-500 font-sans">入场参考</span>
+                          <span className="text-xs font-bold text-slate-800">{detail.entry.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] uppercase tracking-wider text-red-500 font-sans">箱底(止损)</span>
+                          <span className="text-xs font-bold text-red-600">{detail.stopLoss.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] uppercase tracking-wider text-emerald-500 font-sans">2R 目标</span>
+                          <span className="text-xs font-bold text-emerald-600">{detail.target ? detail.target.toFixed(2) : '-'}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] uppercase tracking-wider text-indigo-500 font-sans">预估 R:R</span>
+                          <span className="text-xs font-bold text-indigo-600">{detail.rr ? `${detail.rr.toFixed(1)}:1` : 'N/A'}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between pt-2 border-t border-blue-100/50">
+                        <span className="text-[10px] text-slate-500">已锁定 2R 盈亏比，止损设为企稳箱底</span>
+                        <Button
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] px-3 py-1.5 h-auto"
+                          onClick={() => {
+                            const stabilization = detail.reason?.stabilization as Record<string, any> || {};
+                            const startD = stabilization.startDate || '';
+                            const endD = stabilization.endDate || '';
+                            const boxH = stabilization.boxHigh || '';
+                            const boxL = stabilization.boxLow || '';
+                            const templateReason = `【走势 A 突破逻辑】\n1. 前期经历一轮下跌回调后，于 ${startD} 至 ${endD} 期间企稳整理。\n2. 企稳区间：${boxL} - ${boxH}。\n3. 今日确认突破企稳区间，确认突破假设。`;
+                            const templateExpect = `【If-Then 临盘假设】\n- If：次日开盘或盘中回调不破箱底 ${detail.stopLoss?.toFixed(2)}，且有承接力；\n- Then：分批介入，目标看 2R 止盈位 ${detail.target?.toFixed(2)}。`;
+                            const templatePlan = `【止损与目标】\n- 止损：跌破箱底 ${detail.stopLoss?.toFixed(2)}（硬性止损）。\n- 止盈：达到 2R 目标 ${detail.target?.toFixed(2)}。`;
+                            
+                            navigate('/reviews', {
+                              state: {
+                                prefill: {
+                                  code: detail.code,
+                                  name: detail.name,
+                                  strategyType: 'MOMENTUM_BREAKOUT',
+                                  expectedRrRatio: detail.rr ? `${detail.rr.toFixed(1)}:1` : '2:1',
+                                  stopLossTarget: detail.stopLoss ? `${detail.stopLoss.toFixed(2)}元` : '',
+                                  initialReasonText: templateReason,
+                                  expectedMoveText: templateExpect,
+                                  originalPlanText: templatePlan,
+                                }
+                              }
+                            });
+                          }}
+                        >
+                          一键创建计划卡
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2">
                     {detail.tags.map((tag) => (
                       <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>

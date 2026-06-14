@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CalendarDays, CheckCircle2, Layers3, LineChart, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,16 @@ const textareaClass = 'min-h-24 rounded-md border border-slate-200 bg-white px-3
 
 interface CardFormProps {
   onSubmit: (payload: StockReviewCardRequest) => Promise<void>;
+  prefill?: {
+    code?: string;
+    name?: string;
+    strategyType?: string;
+    expectedRrRatio?: string;
+    stopLossTarget?: string;
+    initialReasonText?: string;
+    expectedMoveText?: string;
+    originalPlanText?: string;
+  };
 }
 
 const SectionTitle = ({ icon: Icon, title }: { icon: React.ElementType; title: string }) => (
@@ -34,7 +44,7 @@ const Field = ({ label, children, className = '' }: { label: string; children: R
   </label>
 );
 
-export const CardForm = ({ onSubmit }: CardFormProps) => {
+export const CardForm = ({ onSubmit, prefill }: CardFormProps) => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -54,6 +64,21 @@ export const CardForm = ({ onSubmit }: CardFormProps) => {
   const [strategyType, setStrategyType] = useState<string | null>(null);
   const [expectedRrRatio, setExpectedRrRatio] = useState('');
   const [stopLossTarget, setStopLossTarget] = useState('');
+
+  useEffect(() => {
+    if (prefill) {
+      if (prefill.code) setCode(prefill.code);
+      if (prefill.name) setName(prefill.name);
+      if (prefill.strategyType) setStrategyType(prefill.strategyType);
+      if (prefill.expectedRrRatio) setExpectedRrRatio(prefill.expectedRrRatio);
+      if (prefill.stopLossTarget) setStopLossTarget(prefill.stopLossTarget);
+      if (prefill.initialReasonText) setInitialReasonText(prefill.initialReasonText);
+      if (prefill.expectedMoveText) setExpectedMoveText(prefill.expectedMoveText);
+      if (prefill.originalPlanText) setOriginalPlanText(prefill.originalPlanText);
+      setInitialAction('PLAN_BUY');
+      setInitialPlanStatus('PLANNED');
+    }
+  }, [prefill]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();

@@ -59,7 +59,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="A股研投模拟系统 Backend", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="定盘 · 心静交易 API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

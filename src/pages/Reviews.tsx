@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { BookOpenCheck, ChevronDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,6 +43,8 @@ function nextSelectedId(cards: StockReviewCardResponse[], currentId: string | nu
 }
 
 export default function Reviews() {
+  const location = useLocation();
+  const prefillData = location.state?.prefill;
   const [cards, setCards] = useState<StockReviewCardResponse[]>([]);
   const [summary, setSummary] = useState<StockReviewCardSummaryResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -53,6 +56,12 @@ export default function Reviews() {
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'CARDS' | 'DOJO'>('CARDS');
+
+  useEffect(() => {
+    if (prefillData) {
+      setCreateOpen(true);
+    }
+  }, [prefillData]);
 
   const load = async (preferredSelectedId = selectedId, statusFilter = status) => {
     let apiStatus: StockReviewCardStatus | 'ALL' | undefined;
@@ -303,7 +312,7 @@ export default function Reviews() {
             </CardHeader>
             {createOpen && (
               <CardContent className="border-t border-slate-100 bg-slate-50/40 pt-4">
-                <CardForm onSubmit={createCard} />
+                <CardForm onSubmit={createCard} prefill={prefillData} />
               </CardContent>
             )}
           </Card>
