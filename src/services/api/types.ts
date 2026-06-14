@@ -200,12 +200,16 @@ export interface ResearchReportResponse {
     yahooTicker: string;
   } | null;
   tradingAgentsSections: {
+    pastContext?: string;
+    instrumentContext?: string;
     market?: string;
     sentiment?: string;
     news?: string;
     fundamentals?: string;
+    investmentDebate?: string;
     researchTeam?: string;
     trader?: string;
+    riskDebate?: string;
     portfolioManager?: string;
   };
   report: {

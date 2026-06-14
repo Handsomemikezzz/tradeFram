@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.app.services.tradingagents_research import (
+    build_sections_from_final_state,
     map_a_share_to_yahoo_ticker,
     normalize_tradingagents_result,
 )
@@ -21,6 +22,21 @@ def test_normalizes_tradingagents_final_state_for_report_display():
         "fundamentals_report": "基本面分析正文",
         "investment_plan": "研究团队结论",
         "trader_investment_plan": "交易员计划",
+        "past_context": "历史记忆上下文",
+        "instrument_context": "标的识别信息",
+        "investment_debate_state": {
+            "bull_history": "看多论点",
+            "bear_history": "看空论点",
+            "history": "完整辩论记录",
+            "judge_decision": "研究经理裁决",
+        },
+        "risk_debate_state": {
+            "aggressive_history": "激进观点",
+            "conservative_history": "保守观点",
+            "neutral_history": "中性观点",
+            "history": "风险辩论记录",
+            "judge_decision": "风险裁决",
+        },
         "final_trade_decision": (
             "Rating: Underweight\n\n"
             "Executive Summary: 立即减持 3-5 个百分点。\n\n"
@@ -44,4 +60,22 @@ def test_normalizes_tradingagents_final_state_for_report_display():
     assert result["decision"]["yahooTicker"] == "600519.SS"
     assert result["sections"]["market"] == "市场分析正文"
     assert result["sections"]["portfolioManager"] == final_state["final_trade_decision"]
+    assert "看多论点" in result["sections"]["investmentDebate"]
+    assert "激进观点" in result["sections"]["riskDebate"]
+    assert result["sections"]["pastContext"] == "历史记忆上下文"
     assert "final_state" in result["raw"]
+
+
+def test_build_sections_from_final_state_matches_normalize_sections():
+    final_state = {
+        "market_report": "市场",
+        "investment_debate_state": {"bull_history": "bull"},
+    }
+    normalized = normalize_tradingagents_result(
+        final_state=final_state,
+        decision="Hold",
+        yahoo_ticker="600519.SS",
+    )
+    rebuilt = build_sections_from_final_state(final_state)
+    assert rebuilt["market"] == normalized["sections"]["market"]
+    assert rebuilt["investmentDebate"] == normalized["sections"]["investmentDebate"]

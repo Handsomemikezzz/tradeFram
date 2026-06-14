@@ -32,6 +32,18 @@ def map_a_share_to_yahoo_ticker(raw_code: str) -> str:
     return f"{code}.SS"
 
 
+def build_sections_from_final_state(final_state: dict[str, Any]) -> dict[str, str]:
+    sections = {
+        section_name: _string_value(final_state.get(state_key))
+        for section_name, state_key in SECTION_KEYS.items()
+    }
+    sections["pastContext"] = _string_value(final_state.get("past_context"))
+    sections["instrumentContext"] = _string_value(final_state.get("instrument_context"))
+    sections["investmentDebate"] = _format_investment_debate(final_state.get("investment_debate_state"))
+    sections["riskDebate"] = _format_risk_debate(final_state.get("risk_debate_state"))
+    return sections
+
+
 def normalize_tradingagents_result(
     *,
     final_state: dict[str, Any],
@@ -41,10 +53,7 @@ def normalize_tradingagents_result(
     final_decision = _string_value(final_state.get("final_trade_decision"))
     parsed = _parse_portfolio_decision(final_decision)
     rating = decision or parsed.get("rating") or "Unknown"
-    sections = {
-        section_name: _string_value(final_state.get(state_key))
-        for section_name, state_key in SECTION_KEYS.items()
-    }
+    sections = build_sections_from_final_state(final_state)
     return {
         "decision": {
             "rating": rating,
@@ -96,6 +105,47 @@ def _ensure_tradingagents_import_path() -> None:
         if candidate and (candidate / "tradingagents").exists() and str(candidate) not in sys.path:
             sys.path.insert(0, str(candidate))
             return
+
+
+def _format_investment_debate(state: Any) -> str:
+    if not isinstance(state, dict):
+        return ""
+    parts: list[str] = []
+    bull = _string_value(state.get("bull_history")).strip()
+    bear = _string_value(state.get("bear_history")).strip()
+    history = _string_value(state.get("history")).strip()
+    judge = _string_value(state.get("judge_decision")).strip()
+    if bull:
+        parts.append(f"### Bull Researcher\n\n{bull}")
+    if bear:
+        parts.append(f"### Bear Researcher\n\n{bear}")
+    if history:
+        parts.append(f"### Debate Transcript\n\n{history}")
+    if judge:
+        parts.append(f"### Research Manager\n\n{judge}")
+    return "\n\n".join(parts)
+
+
+def _format_risk_debate(state: Any) -> str:
+    if not isinstance(state, dict):
+        return ""
+    parts: list[str] = []
+    aggressive = _string_value(state.get("aggressive_history")).strip()
+    conservative = _string_value(state.get("conservative_history")).strip()
+    neutral = _string_value(state.get("neutral_history")).strip()
+    history = _string_value(state.get("history")).strip()
+    judge = _string_value(state.get("judge_decision")).strip()
+    if aggressive:
+        parts.append(f"### Aggressive Analyst\n\n{aggressive}")
+    if conservative:
+        parts.append(f"### Conservative Analyst\n\n{conservative}")
+    if neutral:
+        parts.append(f"### Neutral Analyst\n\n{neutral}")
+    if history:
+        parts.append(f"### Risk Debate Transcript\n\n{history}")
+    if judge:
+        parts.append(f"### Risk Judge\n\n{judge}")
+    return "\n\n".join(parts)
 
 
 def _parse_portfolio_decision(markdown: str) -> dict[str, str]:

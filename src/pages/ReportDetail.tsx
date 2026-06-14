@@ -3,20 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, ArrowUpRight, ArrowDownRight, BarChart3, Clock, Copy, Database, Download, Globe, Newspaper, RefreshCw, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ArrowDownRight, Clock, Copy, Database, Download, RefreshCw, ShieldAlert, Sparkles, TrendingUp } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { dataApi, formatDateTime, monitoringApi, newsTypeLabel, researchApi, ResearchReportResponse, StockDataStatusResponse } from '@/services/api';
+import { dataApi, formatDateTime, monitoringApi, researchApi, ResearchReportResponse, StockDataStatusResponse } from '@/services/api';
 import { copyResearchReportMarkdown, downloadResearchReportMarkdown } from '@/lib/researchReportExport';
+import { listTradingAgentsSections } from '@/lib/tradingAgentsSections';
+import { EngineReportToc, EngineReportTocMobile, engineSectionId } from '@/components/research/EngineReportToc';
 
 const ratingTone = (rating?: string) => {
   const normalized = (rating || '').toLowerCase();
@@ -24,16 +25,6 @@ const ratingTone = (rating?: string) => {
   if (['sell', 'underweight'].includes(normalized)) return 'text-green-700 bg-green-50 border-green-100';
   return 'text-blue-700 bg-blue-50 border-blue-100';
 };
-
-const agentSectionLabels: Array<[keyof NonNullable<ResearchReportResponse['tradingAgentsSections']>, string]> = [
-  ['market', 'Market Analyst'],
-  ['sentiment', 'Sentiment Analyst'],
-  ['news', 'News Analyst'],
-  ['fundamentals', 'Fundamentals Analyst'],
-  ['researchTeam', 'Research Team'],
-  ['trader', 'Trader'],
-  ['portfolioManager', 'Portfolio Manager'],
-];
 
 const MarkdownBlock = ({ content }: { content: string }) => (
   <ReactMarkdown
@@ -75,6 +66,58 @@ export default function ReportDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeEngineSection, setActiveEngineSection] = useState<string | null>(null);
+  const [reportTab, setReportTab] = useState('overview');
+
+  const agentSections = useMemo(
+    () => (report ? listTradingAgentsSections(report.tradingAgentsSections) : []),
+    [report],
+  );
+
+  const jumpToEngineSection = useCallback((key: string) => {
+    document.getElementById(engineSectionId(key))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveEngineSection(key);
+  }, []);
+
+  useEffect(() => {
+    if (agentSections.length === 0) {
+      setActiveEngineSection(null);
+      return;
+    }
+    setActiveEngineSection(agentSections[0].key);
+  }, [report?.reportId, agentSections]);
+
+  useEffect(() => {
+    if (agentSections.length === 0 || reportTab !== 'engine') return;
+
+    let observer: IntersectionObserver | null = null;
+    const frame = window.requestAnimationFrame(() => {
+      const elements = agentSections
+        .map((section) => document.getElementById(engineSectionId(section.key)))
+        .filter((element): element is HTMLElement => element !== null);
+
+      if (elements.length === 0) return;
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+          if (!visible.length) return;
+          const key = visible[0].target.id.replace('engine-section-', '');
+          setActiveEngineSection(key);
+        },
+        { rootMargin: '-15% 0px -55% 0px', threshold: 0 },
+      );
+
+      elements.forEach((element) => observer?.observe(element));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
+  }, [agentSections, reportTab]);
 
   useEffect(() => {
     if (!code) return;
@@ -199,19 +242,6 @@ export default function ReportDetail() {
   const isPositive = report.quote.change >= 0;
   const aiConfidenceLabel = report.report.aiConfidence === null ? '暂无' : `${Math.round(report.report.aiConfidence * 100)}%`;
   const decision = report.tradingAgentsDecision;
-  const agentSections = agentSectionLabels
-    .map(([key, label]) => ({ key, label, content: report.tradingAgentsSections?.[key] || '' }))
-    .filter(section => section.content.trim().length > 0);
-  const financialItems = report.financialSnapshot
-    ? [
-        { label: '营业收入', value: report.financialSnapshot.revenue },
-        { label: '净利润', value: report.financialSnapshot.profit },
-        { label: '毛利率', value: `${report.financialSnapshot.grossMargin}%` },
-        { label: '净利率', value: `${report.financialSnapshot.netMargin}%` },
-        { label: 'ROE', value: `${report.financialSnapshot.roe}%` },
-        { label: '静态市盈率', value: `${report.financialSnapshot.pe}x` },
-      ]
-    : [];
 
   return (
     <div className="space-y-4">
@@ -353,13 +383,10 @@ export default function ReportDetail() {
               <div><div className="text-gray-500 font-bold uppercase">最近错误</div><div className="font-medium text-red-600 truncate" title={dataStatus?.lastError || report.dataMeta.lastError || undefined}>{dataStatus?.lastError || report.dataMeta.lastError || '无'}</div></div>
             </CardContent>
           </Card>
-          <Tabs defaultValue="overview" className="space-y-4">
+          <Tabs value={reportTab} onValueChange={setReportTab} className="space-y-4">
             <TabsList className="bg-white border border-gray-200 rounded-lg p-1 h-auto inline-flex shadow-sm">
               <TabsTrigger value="overview" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">结论摘要</TabsTrigger>
-              <TabsTrigger value="business" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">主营业务</TabsTrigger>
-              <TabsTrigger value="financial" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">财务概览</TabsTrigger>
-              <TabsTrigger value="news" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">新闻公告</TabsTrigger>
-              <TabsTrigger value="agents" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">Agent 辩论</TabsTrigger>
+              <TabsTrigger value="engine" className="text-[10px] font-bold px-6 h-8 uppercase tracking-widest data-[state=active]:bg-gray-100 border-none">引擎全文</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4">
@@ -407,67 +434,42 @@ export default function ReportDetail() {
               </div>
             </TabsContent>
 
-            <TabsContent value="financial">
-              <Card className="border-none shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)]">
-                <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><BarChart3 className="w-5 h-5 text-indigo-500" />财务摘要 (12-Month Trailing)</CardTitle></CardHeader>
-                <CardContent>
-                  {financialItems.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                      {financialItems.map(item => <div key={item.label} className="flex flex-col group"><span className="text-[10px] uppercase font-bold text-muted-foreground mb-1 group-hover:text-primary transition-colors">{item.label}</span><span className="text-lg font-bold tracking-tight">{item.value}</span></div>)}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-400">AkShare 当前未返回可用财务摘要。</div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="business">
-               <Card className="border-none shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)]">
-                <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-blue-500" />主营构成分析</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  {report.report.businessSegments.length === 0 && <div className="text-sm text-gray-400">暂无真实主营构成数据。</div>}
-                  {report.report.businessSegments.map((segment) => (
-                    <div className="space-y-2" key={segment.name}>
-                      <div className="flex justify-between text-xs mb-1"><span className="font-bold">{segment.name}</span><span className="font-mono">{segment.percent}%</span></div>
-                      <div className="h-2 bg-zinc-100 rounded-full overflow-hidden"><div className="h-full bg-red-600" style={{ width: `${segment.percent}%` }} /></div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="news">
-               <Card className="border-none shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)]">
-                <CardHeader><CardTitle className="text-base font-bold flex items-center gap-2"><Newspaper className="w-5 h-5 text-slate-600" />近期相关咨讯</CardTitle></CardHeader>
-                <CardContent className="space-y-4">
-                  {report.report.newsItems.length === 0 && <div className="text-sm text-gray-400">暂无真实新闻公告数据。</div>}
-                  {report.report.newsItems.map(n => (
-                    <div key={n.id} className="flex items-center justify-between p-3 border rounded-xl hover:bg-zinc-50 cursor-pointer transition-colors group">
-                      <div className="flex items-center gap-3"><Badge variant="outline" className="text-[10px] px-1.5 h-5 bg-zinc-50 group-hover:bg-white">{newsTypeLabel(n.type)}</Badge><span className="text-xs font-bold">{n.title}</span></div>
-                      <span className="text-[10px] text-muted-foreground font-mono">{n.date}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="agents" className="space-y-4">
-              {agentSections.length === 0 && (
+            <TabsContent value="engine" className="space-y-4">
+              {agentSections.length === 0 ? (
                 <Card className="border-none shadow-[0_2px_10px_-3px_rgba(0,0,0,0.07)]">
-                  <CardContent className="p-6 text-sm text-gray-400">暂无 TradingAgents 原始分析内容。</CardContent>
+                  <CardContent className="p-6 text-sm text-gray-400">暂无 TradingAgents 引擎输出。</CardContent>
                 </Card>
+              ) : (
+                <div className="flex flex-col lg:flex-row lg:items-start gap-4 lg:gap-6">
+                  <div className="flex-1 min-w-0 space-y-4 order-1">
+                    <EngineReportTocMobile
+                      sections={agentSections}
+                      activeKey={activeEngineSection}
+                      onJump={jumpToEngineSection}
+                    />
+                    {agentSections.map((section) => (
+                      <Card
+                        key={section.key}
+                        id={engineSectionId(section.key)}
+                        className="scroll-mt-28 border border-gray-200 shadow-sm rounded-lg overflow-hidden"
+                      >
+                        <CardHeader className="px-4 py-3 bg-gray-50/70 border-b border-gray-100">
+                          <CardTitle className="text-[10px] font-bold uppercase tracking-wider text-gray-600 italic font-serif">{section.label}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                          <MarkdownBlock content={section.content} />
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  <EngineReportToc
+                    sections={agentSections}
+                    activeKey={activeEngineSection}
+                    onJump={jumpToEngineSection}
+                    className="order-2"
+                  />
+                </div>
               )}
-              {agentSections.map(section => (
-                <Card key={section.key} className="border border-gray-200 shadow-sm rounded-lg overflow-hidden">
-                  <CardHeader className="px-4 py-3 bg-gray-50/70 border-b border-gray-100">
-                    <CardTitle className="text-[10px] font-bold uppercase tracking-wider text-gray-600 italic font-serif">{section.label}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4">
-                    <MarkdownBlock content={section.content} />
-                  </CardContent>
-                </Card>
-              ))}
             </TabsContent>
           </Tabs>
         </div>

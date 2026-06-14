@@ -1,15 +1,6 @@
-import { formatDateTime, newsTypeLabel } from '@/services/api';
+import { formatDateTime } from '@/services/api';
 import type { ResearchReportResponse } from '@/services/api';
-
-const agentSectionLabels: Array<[keyof NonNullable<ResearchReportResponse['tradingAgentsSections']>, string]> = [
-  ['market', 'Market Analyst'],
-  ['sentiment', 'Sentiment Analyst'],
-  ['news', 'News Analyst'],
-  ['fundamentals', 'Fundamentals Analyst'],
-  ['researchTeam', 'Research Team'],
-  ['trader', 'Trader'],
-  ['portfolioManager', 'Portfolio Manager'],
-];
+import { listTradingAgentsSections, TRADING_AGENTS_SECTION_LABELS } from '@/lib/tradingAgentsSections';
 
 const section = (title: string, body: string[]) => [`## ${title}`, '', ...body, ''];
 
@@ -80,42 +71,10 @@ export function buildResearchReportMarkdown(report: ResearchReportResponse): str
     );
   }
 
-  if (report.financialSnapshot) {
-    const financial = report.financialSnapshot;
-    lines.push(
-      ...section('财务概览', [
-        `- 营业收入: ${financial.revenue}`,
-        `- 净利润: ${financial.profit}`,
-        `- 毛利率: ${financial.grossMargin}%`,
-        `- 净利率: ${financial.netMargin}%`,
-        `- ROE: ${financial.roe}%`,
-        `- 静态市盈率: ${financial.pe}x`,
-      ]),
-    );
-  }
-
-  if (report.report.businessSegments.length > 0) {
-    lines.push(
-      ...section('主营构成', report.report.businessSegments.flatMap((segment) => [
-        `- ${segment.name}: ${segment.percent}%`,
-      ])),
-    );
-  }
-
-  if (report.report.newsItems.length > 0) {
-    lines.push(
-      ...section('新闻公告', report.report.newsItems.flatMap((item) => [
-        `- [${newsTypeLabel(item.type)}] ${item.title} (${item.date})`,
-      ])),
-    );
-  }
-
-  const agentSections = agentSectionLabels
-    .map(([key, label]) => ({ label, content: report.tradingAgentsSections?.[key]?.trim() || '' }))
-    .filter((item) => item.content.length > 0);
+  const agentSections = listTradingAgentsSections(report.tradingAgentsSections);
 
   if (agentSections.length > 0) {
-    lines.push('## Agent 辩论', '');
+    lines.push('## TradingAgents 引擎全文', '');
     for (const item of agentSections) {
       lines.push(`### ${item.label}`, '', item.content, '');
     }
@@ -163,3 +122,6 @@ export function downloadResearchReportMarkdown(report: ResearchReportResponse): 
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
 }
+
+// Keep export for tests or external use
+export { TRADING_AGENTS_SECTION_LABELS };

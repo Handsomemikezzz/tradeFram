@@ -7,6 +7,7 @@ from sqlalchemy.orm import object_session
 
 from . import models as m
 from .data_layer.warehouse.reader import WarehouseMarketDataStore
+from .services.tradingagents_research import build_sections_from_final_state
 from .utils import dt_iso
 
 
@@ -134,7 +135,7 @@ def research_report_payload(report: m.ResearchReport) -> dict:
         "trend": trend_payload(stock),
         "financialSnapshot": financial_snapshot_payload(financial) if financial else None,
         "tradingAgentsDecision": report.ai_decision or None,
-        "tradingAgentsSections": (report.ai_raw_result or {}).get("sections", {}),
+        "tradingAgentsSections": _trading_agents_sections(report),
         "report": {
             "overview": report.overview,
             "keyInsights": _merge_live_price_insights(report.key_insights, stock),
@@ -147,6 +148,14 @@ def research_report_payload(report: m.ResearchReport) -> dict:
             "newsItems": report.news_items,
         },
     }
+
+
+def _trading_agents_sections(report: m.ResearchReport) -> dict:
+    raw_result = report.ai_raw_result or {}
+    final_state = (raw_result.get("raw") or {}).get("final_state")
+    if isinstance(final_state, dict) and final_state:
+        return build_sections_from_final_state(final_state)
+    return raw_result.get("sections") or {}
 
 
 def financial_snapshot_payload(financial: m.FinancialSnapshot) -> dict:
