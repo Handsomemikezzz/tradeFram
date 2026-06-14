@@ -60,3 +60,4 @@ data/
 __pycache__/
 .pytest_cache/
 .codegraph/
+docs/
